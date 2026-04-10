@@ -1,0 +1,93 @@
+# ============================================================
+# AI Personal Assistant Framework - Dependencies
+# ============================================================
+# Recommended Python: 3.10.11
+# Python 3.11+ may have issues with PyTorch / faster-whisper.
+# Download: https://www.python.org/downloads/release/python-31011/
+#
+# QUICK START:
+#
+#   1. Core (always required):
+#      pip install -r requirements.txt
+#
+#   2. Pick a voice engine (choose one):
+#      pip install edge-tts                          <- default, online, free
+#      pip install kokoro soundfile                  <- local, high quality
+#      pip install piper-tts                         <- local, language-native
+#      pip install elevenlabs                        <- online, premium
+#
+#   3. Microphone input (required for voice):
+#      pip install pyaudio
+#
+#   4. Pick a speech recognition engine (choose one):
+#      pip install faster-whisper torch torchaudio   <- local Whisper (+ pyaudio)
+#      pip install SpeechRecognition                 <- Google STT fallback (+ pyaudio)
+#
+#   5. Optional features:
+#      pip install sentence-transformers numpy       <- semantic memory / RAG
+#      pip install mss                               <- screen capture / vision
+#      pip install pyautogui                         <- GUI automation in MCP tools
+#      pip install psutil pywin32                    <- meeting detection (Windows)
+#      pip install websockets                        <- VTube Studio lip sync
+# ============================================================
+
+
+# -- CORE - always required ------------------------------------
+openai>=1.30.0
+groq>=0.9.0
+mcp>=1.0.0
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+requests>=2.31.0
+watchdog>=4.0.0
+mouse>=0.7.1
+keyboard>=0.13.5
+pygame>=2.5.0
+
+
+# -- VOICE ENGINES - install one or more ----------------------
+# Default (online, no extra deps):
+edge-tts>=6.1.9
+
+# ElevenLabs (online, premium quality):
+# elevenlabs>=1.2.0
+
+# Kokoro TTS (local, high quality, English-optimized):
+# kokoro
+# soundfile
+
+# Piper TTS (local, language-native, download model separately):
+# piper-tts
+
+
+# -- MICROPHONE INPUT - required for any voice input ----------
+# pyaudio>=0.2.14
+
+
+# -- SPEECH RECOGNITION - install pyaudio + one engine --------
+# Whisper local (high accuracy):
+# faster-whisper>=1.0.0
+# torch>=2.2.0
+# torchaudio>=2.2.0
+
+# Google STT (online, no model download):
+# SpeechRecognition>=3.10.0
+
+
+# -- OPTIONAL FEATURES -----------------------------------------
+# Semantic memory / RAG:
+# sentence-transformers>=2.7.0
+# numpy>=1.26.0
+
+# Screen capture for vision tools:
+# mss>=9.0.1
+
+# GUI automation in MCP tools (open apps, click, type):
+# pyautogui>=0.9.54
+
+# VTube Studio lip sync:
+# websockets>=12.0
+
+# Meeting detection & system info - Windows only:
+# psutil>=5.9.0
+# pywin32>=306

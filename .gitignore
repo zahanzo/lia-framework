@@ -1,0 +1,74 @@
+# ============================================================
+# AI Personal Assistant Framework — .gitignore
+# ============================================================
+
+# Database (contains personal data, API keys, conversation history)
+*.db
+*.db-shm
+*.db-wal
+
+# Auth tokens
+vtube_token.txt
+nizima_token.txt
+*.token.txt
+
+# Upload files
+uploads/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+eggs/
+*.egg
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+*.log.*
+
+# Temp / signals
+input_web.json
+new_vision.signal
+last_vision.png
+*.signal
+*.tmp
+
+# Live2D model files (large binary assets — user provides their own)
+*.moc3
+*.cdi3
+*.can3
+*.cmo3
+runtime/
+Sparkle*/
+hiyori*/
+models/
+
+# TTS model cache
+*.onnx
+*.onnx.json
+
+# Whisper / torch model cache
+# (these are downloaded automatically)
