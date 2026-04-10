@@ -4,8 +4,7 @@ Um assistente de IA local que roda no seu desktop, ouve sua voz, responde natura
 
 Suporte nativo para Português (BR) e Inglês.
 
-
-<video src="demo/lia-demo.mp4" autoplay loop muted style="max-width: 100%;"></video>
+https://github.com/user-attachments/assets/2fabac71-d281-41f8-9adb-8b413c03a349
 
 Nesta demonstração rápida, o LIA executa:
 1. **Dynamic Tooling:** Registro de ferramentas customizadas (`see_screen`, `abrir_app`, `youtube`) direto pelo Dashboard, sem recompilar o servidor.
