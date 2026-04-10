@@ -5,7 +5,7 @@ A AI assistant that runs on your desktop, listens to your voice, responds natura
 Supports Portuguese (BR) and English out of the box.
 
 
-![LIA Framework Demonstration](demo/lia-demo.mp4)
+<video src="demo/lia-demo.mp4" autoplay loop muted style="max-width: 100%;"></video>
 
 In this brief demonstration, LIA performs:
 1. **Dynamic Tooling:** Custom tool registration (`see_screen`, `abrir_app`, `youtube`) directly through the Dashboard, with no server recompilation required.
