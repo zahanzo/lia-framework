@@ -16,8 +16,8 @@ import os
 import io
 import asyncio
 import pygame
-import config
-from i18n import t
+import core.config as config
+from core.i18n import t
 
 # ==========================================
 # BASE AUDIO PLAYBACK
@@ -106,7 +106,7 @@ async def _speak_edge(text: str):
         if audio:
             await asyncio.to_thread(_play_bytes, audio)
     except ImportError:
-        print("❌ [Edge-TTS] Not installed. Run: pip install edge-tts")
+        print(t("voice.edge_not_installed"))
     except Exception as e:
         print(t("voice.edge_error", e=e))
 
@@ -204,8 +204,6 @@ def is_speaking() -> bool:
     """True if audio is currently playing or queued."""
     return _is_speaking or not _voice_queue.empty()
 
-esta_falando = is_speaking
-
 
 def _split_into_sentences(text: str) -> list[str]:
     """Split text into sentences for progressive queuing."""
@@ -228,8 +226,6 @@ async def speak(text: str):
     for sentence in _split_into_sentences(text):
         await _voice_queue.put(sentence)
 
-gerar_voz = speak
-
 
 async def _voice_consumer():
     """Background task — consumes the queue and plays audio sequentially."""
@@ -239,12 +235,12 @@ async def _voice_consumer():
     _lipsync_available = False
     try:
         if getattr(config, "LIPSYNC_ENABLED", False):
-            import lipsync as _lipsync
-            _lipsync.start()
+            import core.lipsync as lipsync
+            lipsync.start()
             _lipsync_available = True
-            print("[Voice] LipSync started.")
+            print(t("voice.lipsync_started"))
         else:
-            print("[Voice] LipSync disabled (enable in dashboard → System).")
+            print(t("voice.lipsync_disabled"))
     except ImportError:
         pass
 
@@ -252,7 +248,7 @@ async def _voice_consumer():
         text = await _voice_queue.get()
         _is_speaking = True
         if _lipsync_available:
-            _lipsync.set_speaking(True)
+            lipsync.set_speaking(True)
         try:
             engine = getattr(config, "CURRENT_VOICE_MODE", "edge").lower()
             if engine in ("elevenlabs", "eleven"):
@@ -270,7 +266,7 @@ async def _voice_consumer():
             if _voice_queue.empty():
                 _is_speaking = False
                 if _lipsync_available:
-                    _lipsync.set_speaking(False)
+                    lipsync.set_speaking(False)
 
 
 def start_voice_consumer():
@@ -280,8 +276,6 @@ def start_voice_consumer():
         asyncio.ensure_future(_voice_consumer())
         _consumer_started = True
         print(t("voice.consumer_started"))
-
-iniciar_consumidor_voz = start_voice_consumer
 
 
 async def clear_queue():
@@ -299,5 +293,3 @@ async def clear_queue():
             _voice_queue.task_done()
         except asyncio.QueueEmpty:
             break
-
-limpar_fila = clear_queue

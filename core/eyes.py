@@ -12,10 +12,11 @@ import os
 import sys
 from datetime import datetime
 
-import config
+import core.config as config
+from core.i18n import t
 
-BASE_DIR     = os.path.dirname(os.path.abspath(__file__))
-VISION_PATH  = os.path.join(BASE_DIR, "last_vision.png")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+VISION_PATH = os.path.join(BASE_DIR, "data", "last_vision.png")
 
 
 def capture_screen() -> str:
@@ -26,7 +27,7 @@ def capture_screen() -> str:
     try:
         from mss import mss
     except ImportError:
-        print("❌ [Vision] mss not installed. Run: pip install mss")
+        print(t("vision.mss_missing"))
         return ""
 
     try:
@@ -36,18 +37,24 @@ def capture_screen() -> str:
         with open(VISION_PATH, "rb") as f:
             return base64.b64encode(f.read()).decode("utf-8")
     except Exception as e:
-        print(f"❌ [Vision] Screen capture failed: {e}", file=sys.stderr)
+        print(t("vision.capture_failed", error=str(e)), file=sys.stderr)
         return ""
 
 
-async def analisar_tela_groq(question: str) -> str:
+async def analyze_screen(question: str) -> str:
     """
     Capture the screen and ask a vision AI model to describe it.
-    Compatible with Groq (llama-vision), OpenRouter and OpenAI.
+    Compatible with Groq (llama-vision), OpenRouter, OpenAI, and Local models.
+    
+    Args:
+        question: The question to ask about the screen content
+        
+    Returns:
+        AI analysis of the screen content
     """
     img_b64 = capture_screen()
     if not img_b64:
-        return "Screen capture unavailable."
+        return t("vision.capture_unavailable")
 
     system_prompt = (
         "You are the vision module of an AI assistant system. "
@@ -57,35 +64,37 @@ async def analisar_tela_groq(question: str) -> str:
         "Just return the description."
     )
 
-    now         = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     user_prompt = f"Instruction: {question} (Timestamp: {now})"
 
     try:
         client = None
-        model  = ""
+        model = ""
+        
         # ── MODEL ROUTING ─────────────────────────────────────────────────
-        if config.CURRENT_MODE == "groq" and config.client_groq:
+        if config.CURRENT_MODE.startswith("local") and hasattr(config, 'client_local') and config.client_local:
+            # Local mode: use local model for vision
+            client = config.client_local
+            model = config.config_data.get("modelo_ia_local", "local-model")
+        elif config.CURRENT_MODE == "groq" and config.client_groq:
             client = config.client_groq
-            model  = config.config_data.get("modelo_visao",     "meta-llama/llama-4-scout-17b-16e-instruct")
+            model = config.config_data.get("modelo_visao", "meta-llama/llama-4-scout-17b-16e-instruct")
         elif config.CURRENT_MODE == "openrouter" and config.client_openrouter:
             client = config.client_openrouter
-            model  = config.config_data.get("modelo_visao",     "google/gemini-2.0-flash-001")
+            model = config.config_data.get("modelo_visao", "google/gemini-2.0-flash-001")
         elif config.client_openai:
             client = config.client_openai
-            model  = config.config_data.get("modelo_visao",     "gpt-4o-mini")
+            model = config.config_data.get("modelo_visao", "gpt-4o-mini")
 
         if not client:
-            raise RuntimeError(
-                "No AI client initialized (Groq / OpenRouter / OpenAI). "
-                "Add your API keys in the dashboard."
-            )
+            raise RuntimeError(t("vision.no_client"))
 
         response = client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user",   "content": [
-                    {"type": "text",      "text": user_prompt},
+                {"role": "user", "content": [
+                    {"type": "text", "text": user_prompt},
                     {"type": "image_url", "image_url": {
                         "url": f"data:image/png;base64,{img_b64}"
                     }}
@@ -95,5 +104,10 @@ async def analisar_tela_groq(question: str) -> str:
         return response.choices[0].message.content
 
     except Exception as e:
-        print(f"❌ [Vision] Analysis failed: {e}", file=sys.stderr)
-        return f"Vision error: {e}"
+        print(t("vision.analysis_failed", error=str(e)), file=sys.stderr)
+        return t("vision.error", error=str(e))
+
+
+# ── Backward compatibility alias ──────────────────────────────────────
+# Keep old function name for existing code that uses it
+analisar_tela_groq = analyze_screen

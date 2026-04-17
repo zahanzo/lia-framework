@@ -31,12 +31,13 @@ import math
 import os
 import time
 import threading
+from core.i18n import t
 
 # ============================================================
 # CONFIGURATION
 # ============================================================
 VTUBE_WS_URL    = "ws://localhost:8001"
-TOKEN_FILE      = "vtube_token.txt"
+TOKEN_FILE      = "data/vtube_token.txt"
 PLUGIN_NAME     = "AI Assistant Lip Sync"
 PLUGIN_DEV      = "AI Framework"
 
@@ -147,7 +148,7 @@ async def _authenticate(ws) -> bool:
             "authenticationToken": token
         })
         if r.get("data", {}).get("authenticated"):
-            print("[LipSync] Authenticated.")
+            print(t("lipsync.authenticated"))
             return True
 
     # Request new token — shows Allow popup in VTube Studio
@@ -157,10 +158,10 @@ async def _authenticate(ws) -> bool:
     })
     new_token = r.get("data", {}).get("authenticationToken", "")
     if not new_token:
-        print("[LipSync] Could not get token. Enable the API in VTube Studio settings.")
+        print(t("lipsync.no_token"))
         return False
 
-    print("[LipSync] Click ALLOW in VTube Studio...")
+    print(t("lipsync.click_allow"))
     r = await _send(ws, "AuthenticationRequest", {
         "pluginName":          PLUGIN_NAME,
         "pluginDeveloper":     PLUGIN_DEV,
@@ -168,10 +169,10 @@ async def _authenticate(ws) -> bool:
     })
     if r.get("data", {}).get("authenticated"):
         _save_token(new_token)
-        print("[LipSync] Authenticated! Token saved.")
+        print(t("lipsync.token_saved"))
         return True
 
-    print("[LipSync] Authentication failed.")
+    print(t("lipsync.auth_failed"))
     return False
 
 
@@ -199,7 +200,7 @@ async def _inject_mouth(ws, value: float):
 
 async def _mouth_loop(ws):
     interval = 1.0 / UPDATE_HZ
-    print("[LipSync] Mouth animation running.")
+    print(t("lipsync.running"))
     while True:
         await _inject_mouth(ws, _calc_mouth())
         await asyncio.sleep(interval)
@@ -212,13 +213,13 @@ async def _run():
     try:
         import websockets
     except ImportError:
-        print("[LipSync] websockets not installed. Run: pip install websockets")
+        print(t("lipsync.websockets_missing"))
         return
 
     retries = 0
     while retries < MAX_RETRIES:
         try:
-            print(f"[LipSync] Connecting to {VTUBE_WS_URL}...")
+            print(t("lipsync.connecting", url=VTUBE_WS_URL))
             async with websockets.connect(VTUBE_WS_URL) as ws:
                 retries = 0
                 if not await _authenticate(ws):
@@ -229,10 +230,9 @@ async def _run():
         except Exception as e:
             retries += 1
             if retries >= MAX_RETRIES:
-                print("[LipSync] Could not connect. Make sure VTube Studio is open")
-                print("          with API enabled (Settings -> General -> Start API).")
+                print(t("lipsync.max_retries"))
                 return
-            print(f"[LipSync] Connection lost ({retries}/{MAX_RETRIES}), retrying in 5s...")
+            print(t("lipsync.reconnecting", current=retries, max=MAX_RETRIES))
             await asyncio.sleep(5)
 
 
@@ -240,15 +240,14 @@ async def _run():
 # STANDALONE TEST
 # ============================================================
 if __name__ == "__main__":
-    print("LipSync test — simulates 5 seconds of speaking.")
-    print("Watch the MouthOpen parameter in VTube Studio.")
+    print(t("lipsync.test_start"))
     start()
     time.sleep(2)   # wait for connection
 
-    print("Speaking...")
+    print(t("lipsync.test_speaking"))
     set_speaking(True)
     time.sleep(5)
 
-    print("Stopped.")
+    print(t("lipsync.test_stopped"))
     set_speaking(False)
     time.sleep(1)

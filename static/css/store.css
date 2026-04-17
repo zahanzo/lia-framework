@@ -1,0 +1,369 @@
+/* ==========================================
+   STORE STYLES
+   ========================================== */
+
+.store-header {
+    margin-bottom: 30px;
+}
+
+.store-header h2 {
+    margin-bottom: 15px;
+    color: var(--text);
+}
+
+.store-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.store-controls input,
+.store-controls select {
+    padding: 10px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+}
+
+.store-controls input {
+    flex: 1;
+    min-width: 300px;
+}
+
+.store-section {
+    margin-bottom: 40px;
+}
+
+.store-section.hidden {
+    display: none;
+}
+
+.store-section h3 {
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border);
+    color: var(--text);
+}
+
+.store-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px;
+}
+
+.store-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.store-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.store-item.installed {
+    border-color: var(--green);
+    background: #1e2d1e;
+}
+
+.store-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    margin-bottom: 10px;
+}
+
+.store-item-title {
+    font-size: 18px;
+    font-weight: bold;
+    color: var(--text);
+    margin: 0;
+}
+
+.store-item-badge {
+    background: #4a5568;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #e0e0e0;
+}
+
+.store-item-badge.master {
+    background: var(--accent);
+}
+
+.store-item-meta {
+    display: flex;
+    gap: 15px;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 10px;
+}
+
+.store-item-description {
+    color: var(--text);
+    font-size: 14px;
+    margin-bottom: 15px;
+    line-height: 1.5;
+}
+
+.store-item-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid var(--border);
+}
+
+.store-item-author {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.store-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.2s;
+}
+
+.store-btn-install {
+    background: var(--green);
+    color: white;
+}
+
+.store-btn-install:hover {
+    background: #3fbd6e;
+}
+
+.store-btn-uninstall {
+    background: var(--red);
+    color: white;
+}
+
+.store-btn-uninstall:hover {
+    background: #e65555;
+}
+
+.btn-submit {
+    background: var(--accent);
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.btn-submit:hover {
+    background: var(--accent2);
+}
+
+.store-empty {
+    text-align: center;
+    padding: 40px;
+    color: var(--muted);
+    background: var(--card);
+    border-radius: var(--radius);
+}
+
+/* Submit Dialog Modal */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+}
+
+.modal-content {
+    background-color: var(--card);
+    margin: 5% auto;
+    padding: 30px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    width: 80%;
+    max-width: 800px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.modal-content h2 {
+    margin-top: 0;
+    color: var(--text);
+}
+
+.modal-content input,
+.modal-content textarea,
+.modal-content select {
+    width: 100%;
+    padding: 10px;
+    margin: 10px 0;
+    border: 1px solid var(--border);
+    background: #1a1f2a;
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    box-sizing: border-box;
+}
+
+.modal-content textarea {
+    font-family: 'Courier New', monospace;
+    resize: vertical;
+}
+
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 20px;
+}
+
+.close:hover,
+.close:focus {
+    color: #fff;
+}
+
+/* JSON Preview */
+.json-preview {
+    background: #0a0f1a;
+    padding: 15px;
+    border-radius: var(--radius-sm);
+    margin: 20px 0;
+    overflow-x: auto;
+    max-height: 300px;
+}
+
+.json-preview pre {
+    margin: 0;
+    color: var(--text);
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+}
+
+.github-link-btn {
+    display: inline-block;
+    text-decoration: none;
+    margin-right: 10px;
+}
+
+/* Form Styling */
+.form-row {
+    margin-bottom: 20px;
+}
+
+.form-label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    font-size: 14px;
+    color: var(--text);
+}
+
+.form-input,
+.form-textarea {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+    transition: border-color 0.2s;
+}
+
+.form-input:focus,
+.form-textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.form-textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+/* Modal Styling */
+.modal.open,
+#submit-dialog.open,
+#master-tool-dialog.open {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    max-height: 90vh;
+    overflow-y: auto;
+    position: relative;
+}
+
+.modal-footer {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+}
+
+/* Button Styles */
+.btn {
+    padding: 8px 16px;
+    border-radius: var(--radius-sm);
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.btn-sm {
+    padding: 5px 10px;
+    font-size: 12px;
+}
+
+.btn-success {
+    background: var(--green);
+    color: white;
+}
+
+.btn-success:hover {
+    opacity: 0.9;
+}
+
+.btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+}
+
+.btn-ghost:hover {
+    background: var(--card);
+}
+
+.btn-primary {
+    background: var(--accent);
+    color: white;
+}
+
+/* Master Tool Item */
+.master-tool-item {
+    transition: background 0.2s;
+}
+
+.master-tool-item:hover {
+    background: var(--surface) !important;
+}

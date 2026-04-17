@@ -13,11 +13,11 @@ import sys
 import math
 from datetime import datetime
 
-import config
-from i18n import t
+import core.config as config
+from core.i18n import t
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH  = os.path.join(BASE_DIR, config.DB_PATH)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(BASE_DIR, "data", "ai_brain.db")
 
 # ==========================================
 # EMBEDDING MODEL (lazy load)
@@ -42,7 +42,7 @@ def _get_model():
 
 
 def warmup_embedding_model() -> None:
-    """Pré-carrega embeddings em thread daemon — primeira mensagem não trava o turno."""
+    """Preload embeddings in daemon thread — first message doesn't block the turn."""
     def _go() -> None:
         try:
             _get_model()
@@ -108,14 +108,12 @@ def initialize_table():
     """)
     print(t("memory.table_ready"))
 
-inicializar_tabela = initialize_table
-
 
 # ==========================================
 # SAVE MEMORY (with deduplication)
 # ==========================================
 def save_memory(content: str) -> bool:
-    """Save a fact with its embedding. Rejects duplicates with >85% similarity."""
+    """Save a fact with its embedding. Rejects duplicates with >=85% similarity."""
     if not content or len(content.strip()) < 10:
         return False
 
@@ -124,14 +122,19 @@ def save_memory(content: str) -> bool:
         return False
 
     # Deduplication check
-    rows = _run_sql("SELECT embedding_json FROM memories", fetch=True)
+    rows = _run_sql("SELECT id, content, embedding_json FROM memories", fetch=True)
     if rows:
         for row in rows:
             try:
-                existing_vec = json.loads(row[0])
+                existing_id = row[0]
+                existing_content = row[1]
+                existing_vec = json.loads(row[2])
                 sim = _cosine_similarity(new_vec, existing_vec)
-                if sim > 0.85:
-                    print(t("memory.duplicate", sim=sim))
+                if sim >= 0.85:  # ✅ CORRIGIDO: >= em vez de >
+                    # Mostrar qual memória é similar
+                    print(f"⚠️ [Memória] Duplicata detectada (sim={sim:.2f})")
+                    print(f"   Nova: {content[:60]}...")
+                    print(f"   Existente: {existing_content[:60]}...")
                     return False
             except Exception:
                 continue
@@ -143,8 +146,6 @@ def save_memory(content: str) -> bool:
     )
     print(t("memory.saved", content=content[:70] + ("..." if len(content) > 70 else "")))
     return True
-
-salvar_memoria = save_memory
 
 
 # ==========================================
@@ -183,8 +184,6 @@ def search_memories(query: str, top_k: int = 4, threshold: float = 0.42) -> list
     if results:
         print(t("memory.found", n=len(results)))
     return results
-
-buscar_memorias = search_memories
 
 
 # ==========================================
@@ -245,8 +244,6 @@ async def extract_and_save_facts(user_message: str, ai_response: str):
     except Exception as e:
         print(t("memory.extract_error", e=e), file=sys.stderr)
 
-extrair_e_salvar_fatos = extract_and_save_facts
-
 
 # ==========================================
 # LIST / MANAGE
@@ -267,14 +264,10 @@ def delete_memory(memory_id: int) -> bool:
     _run_sql("DELETE FROM memories WHERE id = ?", (memory_id,))
     return True
 
-apagar_memoria = delete_memory
-
 
 def delete_all_memories() -> bool:
     _run_sql("DELETE FROM memories")
     return True
-
-apagar_todas_memorias = delete_all_memories
 
 
 # ==========================================
@@ -297,5 +290,3 @@ def apply_decay(days: int = 30):
         print(t("memory.decay", n=count, days=days))
     else:
         print(t("memory.decay_none"))
-
-aplicar_decay = apply_decay

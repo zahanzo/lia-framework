@@ -26,21 +26,94 @@ os.environ["PYTHONUTF8"]                 = "1"
 # ==========================================
 from mcp import stdio_client, ClientSession, StdioServerParameters
 
-import config
-import memory
-import skills as skills_mod
-from web_input_watcher import start_web_input_watcher
-from mouth import speak as gerar_voz, start_voice_consumer, clear_queue, is_speaking
-from i18n  import t
+import core.config as config
+import core.memory as memory
+import core.skills as skills
+import core.tool_retrieval as tool_retrieval
+from core.web_input_watcher import start_web_input_watcher
+from core.mouth import speak as gerar_voz, start_voice_consumer, clear_queue, is_speaking
+from core.i18n import t
+from core.tool_executor import execute_tool
 
 # MCP: pip install na primeira execução + ferramentas que abrem navegador podem levar minutos.
 MCP_TOOL_TIMEOUT_SEC = 100
+
+active_system_context = ""
+
+# ==========================================
+# AUTO-RELOAD SYSTEM
+# ==========================================
+RELOAD_SIGNAL_FILE = os.path.join(config.BASE_DIR, "data", "reload_signal.flag")
+CLEAR_SESSION_FILE = os.path.join(config.BASE_DIR, "data", "clear_session.flag")
+def _extract_system_context(text: str) -> tuple[str, str]:
+    """
+    Extract [SYSTEM] content from tool responses.
+    
+    Returns:
+        tuple: (cleaned_text, system_context)
+        - cleaned_text: Text without [SYSTEM] tags
+        - system_context: Content inside [SYSTEM] tags (or empty string)
+    """
+    if not text or '[SYSTEM]' not in text:
+        return text, ""
+    
+    # Extract system context
+    import re
+    pattern = r'\[SYSTEM\](.*?)\[/SYSTEM\]'
+    matches = re.findall(pattern, text, re.DOTALL)
+    
+    # Remove [SYSTEM] tags from text
+    cleaned = re.sub(pattern, '', text, flags=re.DOTALL).strip()
+    
+    # Join all system contexts
+    system_context = '\n'.join(matches).strip()
+    
+    return cleaned, system_context
+
+def _get_file_type(att):
+    return att.get("tipo") or att.get("type")
+
+def _get_file_name(att):
+    return att.get("nome") or att.get("name")
+
+def check_reload_signal():
+    """Verifica se há sinal para recarregar configurações"""
+    if os.path.exists(RELOAD_SIGNAL_FILE):
+        try:
+            os.remove(RELOAD_SIGNAL_FILE)
+            print("🔄 Recarregando configurações...")
+            config.reload_all()
+        except Exception as e:
+            print(f"⚠️ Erro ao recarregar: {e}")
+
+def _start_reload_monitor():
+    """Monitora arquivo de reload em thread separada (igual ao web_input_watcher)"""
+    import threading
+    import time
+    
+    def _monitor_loop():
+        while True:
+            try:
+                check_reload_signal()
+                
+                # Monitora clear session igual ao web_input_watcher
+                if os.path.exists(CLEAR_SESSION_FILE):
+                    os.remove(CLEAR_SESSION_FILE)
+                    config.pending_clear_session = True
+                    print("🧹 Sinal de limpar sessão detectado")
+                
+                time.sleep(0.5)  # Verifica a cada 500ms
+            except Exception as e:
+                print(f"⚠️ [Reload Monitor] Erro: {e}")
+    
+    thread = threading.Thread(target=_monitor_loop, daemon=True)
+    thread.start()
+    print("✅ [Reload Monitor] Iniciado")
 
 # ==========================================
 # UTILITIES
 # ==========================================
 def _write_status(msg: str):
-    """Write current processing status to DB for the dashboard to display."""
     try:
         config.run_sql(
             "INSERT OR REPLACE INTO system_state (key, text_value) VALUES (?, ?)",
@@ -65,14 +138,54 @@ def _clean_response(text: str) -> str:
     """Strip system tags and fake tool-call JSON blocks from AI responses."""
     if not text:
         return "Done!"
+    
+    # ✅ NOVO: Extract and remove [SYSTEM] content FIRST
+    text, _ = _extract_system_context(text)  # Remove [SYSTEM] but don't use it here
+    
     text = re.sub(r'<function=.*?>.*?</function>', '', text, flags=re.DOTALL)
     text = re.sub(r'\[DEBUG_METADATA\].*?\n\n',   '', text, flags=re.DOTALL)
-    # Remove fake JSON tool-calls some models generate when they don't have real tools
+    
+    # Remove fake JSON tool-calls
     for pattern in [r'"tool_code"', r'"tool_use"', r'"visual_analysis"', r'"image_url"',
                     r'"tool"', r'"web_search"', r'"params"', r'"function"']:
         text = re.sub(rf'```(?:json)?\s*\{{[^`]*{pattern}[^`]*\}}\s*```', '', text, flags=re.DOTALL)
         text = re.sub(rf'^\s*\{{[^}}]*{pattern}[^}}]*\}}\s*$', '', text, flags=re.DOTALL | re.MULTILINE)
+    
+    # Parse i18n tags BEFORE returning
+    text = _parse_i18n_response(text)
+    
     return text.strip() or "Action completed."
+
+
+def _parse_i18n_response(text: str) -> str:
+    """
+    Parse multilingual tool responses.
+    Format: [DIRECT][EN]English text[/EN][PT]Portuguese text[/PT]
+    
+    Extracts only the text for the current UI language.
+    Falls back to original text if no tags found.
+    """
+    if not text:
+        return text
+    
+    # Get current language from config
+    from core.i18n import get_language
+    current_lang = get_language() or 'pt'
+    
+    # Map language codes to tags
+    lang_tag = 'EN' if current_lang == 'en' else 'PT'
+    
+    # Pattern to match [EN]...[/EN] or [PT]...[/PT]
+    pattern = rf'\[{lang_tag}\](.*?)\[/{lang_tag}\]'
+    matches = re.findall(pattern, text, re.DOTALL)
+    
+    if matches:
+        # Join all matches and remove [DIRECT] tag
+        extracted = ' '.join(matches).strip()
+        return extracted.replace('[DIRECT]', '').strip()
+    
+    # No language tags found - return original (still remove [DIRECT])
+    return text.replace('[DIRECT]', '').strip()
 
 
 def _unwrap_exception(e, level=0) -> str:
@@ -102,13 +215,26 @@ async def classify_intent(message: str) -> str:
         f"Message: {message}"
     )
     try:
-        r = await asyncio.to_thread(
-            config.client_groq.chat.completions.create,
-            model="llama-3.1-8b-instant",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=5,
-            temperature=0.0
-        )
+        # Respeita modo local
+        if config.CURRENT_MODE.startswith("local") and hasattr(config, 'client_local') and config.client_local:
+            local_model = config.config_data.get("modelo_ia_local", "local-model")
+            r = await asyncio.to_thread(
+                config.client_local.chat.completions.create,
+                model=local_model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=5,
+                temperature=0.0
+            )
+        elif config.client_groq:
+            r = await asyncio.to_thread(
+                config.client_groq.chat.completions.create,
+                model="llama-3.1-8b-instant",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=5,
+                temperature=0.0
+            )
+        else:
+            return "general"
         cat = r.choices[0].message.content.strip().lower()
         return cat if cat in ("vision", "code", "general") else "general"
     except Exception:
@@ -214,6 +340,8 @@ async def assistant_loop():
     session_log = []
 
     while True:
+        config.mic_state = "idle"  # Reseta status do microfone
+        _write_status("")  # Limpa status do webui
         print(t("mcp.connecting"))
         # Garante que roda no mesmo Python da Maya e herda as variáveis (UTF-8, etc)
         params = StdioServerParameters(
@@ -254,40 +382,87 @@ async def assistant_loop():
             await asyncio.sleep(5)
 
 
+def _convert_tools_to_mcp_format(tools_list: list) -> list:
+    """
+    Converte ferramentas do formato tool_retrieval para o formato MCP esperado.
+    
+    tool_retrieval retorna: {name, description, input_schema}
+    MCP espera: {type: "function", function: {name, description, parameters}}
+    """
+    return [{
+        "type": "function",
+        "function": {
+            "name": tool["name"],
+            "description": tool["description"],
+            "parameters": tool.get("input_schema", {})
+        }
+    } for tool in tools_list]
+
+
 async def _process_turn(mcp, tools_json, system_commands, session_log, session_id):
     """One complete turn: listen → process → respond. Returns current session_id."""
 
     # ── INPUT ─────────────────────────────────────────────────────────
     raw_input    = ""
     special_mode = None
+    global active_system_context
 
-    from ears import ouvir_microfone, ouvir_continuo_vad
+    from core.ears import listen_button, listen_continuous_vad
     listen_method = config.config_data.get("audio", {}).get("metodo_escuta", "atalho")
 
     if listen_method == "silero":
         if mouse.is_pressed("x2"):
             await prepare_mic()
-            raw_input    = ouvir_microfone("\n📸 [Manual Vision]...", "x2")
+            raw_input    = listen_button("\n📸 [Manual Vision]...", "x2")
             special_mode = "vision"
         else:
-            raw_input    = await asyncio.to_thread(ouvir_continuo_vad)
-            special_mode = "chat"
+            result = await asyncio.to_thread(listen_continuous_vad)
+            if isinstance(result, dict):
+                # É input web
+                raw_input = result
+                special_mode = "chat"
+            else:
+                # É transcrição de áudio
+                raw_input = result
+                special_mode = "chat"
     else:
         while True:
+            input_file = os.path.join(config.BASE_DIR, "data", "input_web.json")
+            if os.path.exists(input_file):
+                try:
+                    with open(input_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    os.remove(input_file)  # Remove após ler com sucesso
+                    
+                    if data.get("comando") == "toggle_batepapo":
+                        if data.get("ativo"):
+                            skills.activate()
+                        else:
+                            skills.deactivate()
+                        continue
+                    
+                    if data.get("conteudo_completo") or data.get("arquivos"):
+                        config.pending_web_input = data
+                        print(t("turn.web_received"))
+                        break
+                except Exception as e:
+                    print(f"❌ Erro ao ler input_web.json: {e}")
+                    os.remove(input_file)  # Remove arquivo corrompido
+
             if config.pending_web_input:
-                raw_input    = config.pending_web_input
+                raw_input = config.pending_web_input
                 config.pending_web_input = None
                 special_mode = "chat"
                 print(t("turn.web_received"))
                 break
             if mouse.is_pressed("x"):
                 await prepare_mic()
-                raw_input    = ouvir_microfone(f"\n🎙️ [{config.CURRENT_MODE.upper()}] Speaking...", "x")
+                raw_input    = listen_button(f"\n🎙️ [{config.CURRENT_MODE.upper()}] Speaking...", "x")
                 special_mode = "chat"
                 break
             elif mouse.is_pressed("x2"):
                 await prepare_mic()
-                raw_input    = ouvir_microfone("\n📸 [Manual Vision]...", "x2")
+                raw_input    = listen_button("\n📸 [Manual Vision]...", "x2")
                 special_mode = "vision"
                 break
             await asyncio.sleep(0.05)
@@ -304,7 +479,7 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
         attachments  = raw_input.get("arquivos", [])
         message_text = raw_input.get("texto", "").strip()
         display_text = raw_input.get("conteudo_completo", message_text)
-        has_image    = any(a.get("tipo") == "imagem" for a in attachments)
+        has_image = any(_get_file_type(a) == "imagem" for a in attachments)
         user_message = message_text or display_text
         print(t("turn.attachment", n=len(attachments), text=message_text[:60]))
     else:
@@ -326,11 +501,11 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
     chat_activate   = ["let's chat", "chat mode", "casual mode", "let's talk", "want to chat"]
     chat_deactivate = ["stop chatting", "normal mode", "focus mode", "back to normal"]
     if any(p in msg_lower for p in chat_activate):
-        skills_mod.activate()
+        skills.activate()
         await gerar_voz("Chat mode on! Let's talk.")
         return session_id
     if any(p in msg_lower for p in chat_deactivate):
-        skills_mod.deactivate()
+        skills.deactivate()
         await gerar_voz("Back to normal mode!")
         return session_id
 
@@ -344,6 +519,27 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
         session_id = config.start_new_session()
         config.set_current_session(session_id)
         print(t("session.new", id=session_id))
+
+    # ── VERIFICA CLEAR SESSION ANTES DE ADICIONAR AO HISTÓRICO ────────
+    # CRÍTICO: Verifica aqui para limpar ANTES de add_to_history
+    if hasattr(config, 'pending_clear_session') and config.pending_clear_session:
+        config.pending_clear_session = False
+        print("🧹 Limpando sessão (antes de adicionar nova mensagem)...")
+        session_log.clear()
+        session_id = None
+        
+        # Espera banco limpar
+        for _ in range(20):
+            rows = config.run_sql("SELECT COUNT(*) FROM chat_history", fetch=True)
+            if rows and rows[0][0] == 1:
+                break
+            await asyncio.sleep(0.05)
+        
+        config.history = [
+            {"role": row[0], "content": row[1]} 
+            for row in config.run_sql("SELECT role, content FROM chat_history ORDER BY id", fetch=True)
+        ]
+        print(f"   Histórico recarregado: {len(config.history)} mensagem(ns)")
 
     # ── SAVE TO HISTORY ───────────────────────────────────────────────
     config.add_to_history("user", display_text)
@@ -359,7 +555,7 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
     ) if memories else ""
 
     # ── SKILL INJECTION ───────────────────────────────────────────────
-    skill_injection = skills_mod.get_prompt_injection() if not has_image else ""
+    skill_injection = skills.get_prompt_injection() if not has_image else ""
 
     # ── BUILD API MESSAGES ────────────────────────────────────────────
     summary   = config.get_status_summary()
@@ -370,13 +566,16 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
         "Only call a tool if the user EXPLICITLY asked for an action (open apps, search, music, commands). "
         "NEVER call tools for greetings, casual conversation, or affectionate messages. "
         "When in doubt, provide a standard text response without using tools."
+        "[SYSTEM NOTE]"
+        "When you have access to specialized tools from a master, you should prefer those over general tools."
+        "For example, if the master has a web search tool, use it instead of a generic browser tool. "
     )
     history_base = list(config.history[:-1])   # exclude last (the user msg just added)
 
     if has_image:
         parts = [{"type": "text", "text": message_text or "Describe what you see in this image."}]
         for att in attachments:
-            if att.get("tipo") == "imagem":
+            if _get_file_type(att) == "imagem":
                 block = _load_image_b64(att["url"])
                 if block:
                     parts.append(block)
@@ -389,20 +588,35 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
     else:
         extra_context = ""
         for att in attachments:
-            if att.get("tipo") == "arquivo":
-                extra_context += _read_text_file(att["url"], att.get("nome", ""))
+            if _get_file_type(att) == "arquivo":
+                file_name = att.get("nome") or att.get("name", "")
+                extra_context += _read_text_file(att["url"], file_name)
+                
+        system_context_msg = []
+        if active_system_context:
+            system_context_msg = [{"role": "system", "content": active_system_context}]
         api_messages = (
             history_base
             + [{"role": "system", "content": metadata}]
+            + system_context_msg
             + [{"role": "user",   "content": f"{user_message}{extra_context}"}]
         )
 
     # ── MODEL ROUTING ─────────────────────────────────────────────────
-    model_main    = config.config_data.get("modelo_principal", "deepseek/deepseek-chat")
-    model_vision  = config.config_data.get("modelo_visao",     "google/gemini-2.0-flash-001")
-    model_code    = config.config_data.get("modelo_codigo",    "anthropic/claude-3.5-sonnet")
-    model_persona = config.config_data.get("modelo_roleplay",  "nousresearch/hermes-3-llama-3.1-405b")
+    current_provider = config.config_data.get("modo_ia", "groq")
+    provider_models = config.config_data.get("modelos", {}).get(current_provider, {})
 
+    # Modo local: usa o mesmo modelo para TUDO
+    if config.CURRENT_MODE.startswith("local"):
+        local_model = config.config_data.get("modelo_ia_local", "local-model")
+        model_main = model_vision = model_code = model_persona = local_model
+        print(f"🤖 Modo local: Usando '{local_model}' para todas as tarefas")
+    else:
+        model_main    = provider_models.get("modelo_principal", "llama-3.3-70b-versatile")
+        model_vision  = provider_models.get("modelo_visao",     "llama-3.2-90b-vision-preview")
+        model_code    = provider_models.get("modelo_codigo",    "llama-3.3-70b-versatile")
+        model_persona = provider_models.get("modelo_roleplay",  "llama-3.3-70b-versatile")
+    
     if config.ROLEPLAY_ACTIVE:
         intent      = "roleplay"
         final_model = model_persona
@@ -415,7 +629,9 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
         intent = await classify_intent(user_message)
         final_model = {"vision": model_vision,
                        "code":   model_code}.get(intent, model_main)
-        print(t("ai.intent", intent=intent, model=final_model))
+        # Corrige o log para modo local
+        display_model = config.config_data.get("modelo_ia_local") if config.CURRENT_MODE.startswith("local") else final_model
+        print(t("ai.intent", intent=intent, model=display_model))
 
     # ── API CALL ──────────────────────────────────────────────────────
     response_text = ""
@@ -428,6 +644,9 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
             elif config.CURRENT_MODE == "groq" and config.client_groq:
                 return config.client_groq.chat.completions.create(
                     model  = config.config_data.get("modelo_visao",     "meta-llama/llama-4-scout-17b-16e-instruct"), messages=api_messages, temperature=0.7)
+            elif config.CURRENT_MODE.startswith("local") and hasattr(config, 'client_local') and config.client_local:
+                local_model = config.config_data.get("modelo_ia_local", "local-model")
+                return config.client_local.chat.completions.create(model=local_model, messages=api_messages, temperature=0.7)
             else:
                 return config.client_openai.chat.completions.create(
                     model="gpt-4o-mini", messages=api_messages, temperature=0.7)
@@ -438,8 +657,12 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
     else:
         _write_status("⚙️ Generating response...")
 
+        # Usa RAG para buscar ferramentas relevantes (embeddings)
+        relevant_tools_data = tool_retrieval.get_relevant_tools_for_ai(user_message, top_k=5)
+        relevant_tools = _convert_tools_to_mcp_format(relevant_tools_data)
+        
         # Roleplay mode: no tools — the persona model should respond freely
-        use_tools = tools_json if not config.ROLEPLAY_ACTIVE else []
+        use_tools = relevant_tools if not config.ROLEPLAY_ACTIVE else []
 
         def _call_chat():
             if config.CURRENT_MODE == "openrouter" and config.client_openrouter:
@@ -450,6 +673,9 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
                 return config.client_groq.chat.completions.create(
                     model=final_model, messages=api_messages,
                     temperature=0.6, tools=use_tools or None)
+            elif config.CURRENT_MODE.startswith("local") and hasattr(config, 'client_local') and config.client_local:
+                local_model = config.config_data.get("modelo_ia_local", "local-model")
+                return config.client_local.chat.completions.create(model=local_model, messages=api_messages, temperature=0.6, tools=use_tools or None)
             else:
                 return config.client_openai.chat.completions.create(
                     model="gpt-4o-mini", messages=api_messages,
@@ -465,6 +691,8 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
             print(t("mcp.tool_using", tools=", ".join(tool_names)))
             
             results = []
+            system_contexts = []  # ✅ NOVO: Armazena contextos de sistema
+            
             for tc in msg.tool_calls:
                 args = json.loads(tc.function.arguments)
                 try:
@@ -476,41 +704,57 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
                 except Exception as e:
                     text_result = f"Error executing {tc.function.name}: {str(e)}"
                 
-                results.append(text_result)
-                print(t("mcp.tool_result", result=text_result[:80]))
+                # ✅ NOVO: Extrair contexto de sistema ANTES de processar
+                cleaned_result, system_context = _extract_system_context(text_result)
+                
+                if system_context:
+                    system_contexts.append(system_context)
+                    print(f"🔍 [SYSTEM Context] {system_context[:100]}...")  # Debug
+                
+                results.append(cleaned_result)
+                print(t("mcp.tool_result", result=cleaned_result[:80]))
 
-                # --- Process results after the loop finishes ---
-                combined_result = " ".join(results).strip()
+            # --- Process results after the loop finishes ---
+            combined_result = " ".join(results).strip()
 
-                if combined_result.startswith("[DIRECT]"):
+            if combined_result.startswith("[DIRECT]"):
                 # Fast track: return the plugin's response directly to the UI
-                    response_text = combined_result.replace("[DIRECT]", "").strip()
-                else:
-                    # Agentic track: send the technical result back to the LLM for interpretation
-                    _write_status("Processing tool data...")
-                    ctx = [
-                        {"role": "system", "content": config.personality_context},
-                        {"role": "user", "content": (
-                            f"Technical results from tools:\n\n{combined_result}\n\n"
-                            "Respond NATURALLY to the user based on this data. "
-                            "Talk directly TO the user using 'you'. "
-                            "Maintain the assigned persona at all times."
-                        )}
-                    ]
-                    try:
-                        if config.CURRENT_MODE == "openrouter":
-                            r2 = config.client_openrouter.chat.completions.create(
+                response_text = combined_result.replace("[DIRECT]", "").strip()
+            else:
+                # Agentic track: send the technical result back to the LLM for interpretation
+                _write_status("Processing tool data...")
+                
+                # ✅ NOVO: Inject system context into the LLM prompt
+                system_injection = ""
+                if system_contexts:
+                    system_injection = "\n\n[INTERNAL CONTEXT - Use this data to answer the user]:\n" + "\n".join(system_contexts)
+                
+                ctx = [
+                    {"role": "system", "content": config.personality_context},
+                    {"role": "user", "content": (
+                        f"Technical results from tools:\n\n{combined_result}{system_injection}\n\n"
+                        "Respond NATURALLY to the user based on this data. "
+                        "Talk directly TO the user using 'you'. "
+                        "Maintain the assigned persona at all times."
+                    )}
+                ]
+                try:
+                    if config.CURRENT_MODE == "openrouter":
+                        r2 = config.client_openrouter.chat.completions.create(
+                            model=model_main, messages=ctx, temperature=0.7)
+                    elif config.CURRENT_MODE == "groq":
+                        r2 = config.client_groq.chat.completions.create(
                                 model=model_main, messages=ctx, temperature=0.7)
-                        elif config.CURRENT_MODE == "groq":
-                            r2 = config.client_groq.chat.completions.create(
-                                model=model_main, messages=ctx, temperature=0.7)
-                        else:
-                            r2 = config.client_openai.chat.completions.create(
-                                model=model_main, messages=ctx)
-                        response_text = r2.choices[0].message.content or ""
+                    elif config.CURRENT_MODE.startswith("local") and hasattr(config, 'client_local') and config.client_local:
+                        local_model = config.config_data.get("modelo_ia_local", "local-model")
+                        r2 = config.client_local.chat.completions.create(model=local_model, messages=ctx, temperature=0.7)
+                    else:
+                        r2 = config.client_openai.chat.completions.create(
+                            model=model_main, messages=ctx)
+                    response_text = r2.choices[0].message.content or ""
                     
-                    except Exception as e:
-                        response_text = "Sorry, I had trouble processing the tool results."
+                except Exception as e:
+                    response_text = "Sorry, I had trouble processing the tool results."
 
     # ── FINALIZE ──────────────────────────────────────────────────────
     for tag, action in system_commands.items():
@@ -519,6 +763,7 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
             break
 
     final_text = _clean_response(response_text)
+    
     config.add_to_history("assistant", final_text)
     session_log.append(f"AI: {final_text[:100]}")
 
@@ -571,7 +816,7 @@ async def loop_vision_bg():
         try:
             if await screen_changed():
                 print(t("system.vision_bg"))
-                import eyes
+                import core.eyes as eyes
                 desc = await eyes.analisar_tela_groq("Briefly describe what is on the screen.")
                 if desc:
                     config.run_sql(
@@ -611,6 +856,14 @@ def force_quit():
         keyboard.unhook_all()
     except Exception:
         pass
+    
+    # Desativa master ativo antes de sair
+    try:
+        config.run_sql("UPDATE active_master SET master_name = NULL WHERE id = 1")
+        print("🔧 Master desativado")
+    except Exception:
+        pass
+    
     print(t("system.shutdown"))
     os._exit(0)
 
@@ -638,7 +891,7 @@ async def start_system():
     config.initialize_db()
     memory.initialize_table()
     memory.warmup_embedding_model()
-    skills_mod.sync_state()
+    skills.sync_state()
     start_voice_consumer()
 
     await asyncio.gather(
@@ -656,6 +909,7 @@ async def start_system():
 if __name__ == "__main__":
     _install_interrupt_handlers()
     start_web_input_watcher()
+    _start_reload_monitor()  # Monitora reloads continuamente
 
     def _toggle_focus():
         config.FOCUS_MODE = not config.FOCUS_MODE

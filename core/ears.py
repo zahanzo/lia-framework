@@ -16,8 +16,8 @@ Listen modes:
 import io
 import os
 import wave
-import config
-from i18n import t
+import core.config as config
+from core.i18n import t
 
 # ── State ────────────────────────────────────────────────────────────────────
 _whisper_model = None
@@ -30,7 +30,7 @@ _interrupt_flag = False   # set to True when AI speech should be interrupted
 # LAZY LOADERS
 # ==========================================
 def _load_whisper():
-    """Recarrega o modelo se o tamanho no config mudar (painel WebUI)."""
+    """Reload the model if the size in config changes (WebUI panel)."""
     global _whisper_model, _whisper_size_loaded
     size = getattr(config, "WHISPER_MODEL", "small") or "small"
     if _whisper_model is not None and _whisper_size_loaded == size:
@@ -63,11 +63,11 @@ def _load_vad():
             trust_repo=True,
             verbose=False
         )
-        print("✅ [VAD] Silero VAD loaded.")
+        print(t("ears.vad_loaded"))
     except ImportError as e:
-        print(f"❌ [VAD] Erro real do Torch: {e}")
+        print(t("ears.vad_torch_error", e=e))
     except Exception as e:
-        print(f"❌ [VAD] Failed to load model: {e}")
+        print(t("ears.vad_load_error", e=e))
     return _vad_model
 
 
@@ -92,7 +92,7 @@ def _get_pyaudio():
         import pyaudio
         return pyaudio
     except ImportError:
-        print("❌ [Audio] pyaudio not installed. Run: pip install pyaudio")
+        print(t("ears.pyaudio_missing"))
         return None
 
 
@@ -111,6 +111,7 @@ def _transcribe(frames: list, fmt, channels: int, rate: int, sample_width: int) 
     wav_buf.seek(0)
 
     engine = getattr(config, "STT_ENGINE", "whisper")
+    lang = config.config_data.get("ui_language", "en")
 
     # ── Whisper ───────────────────────────────────────────────────────
     if engine == "whisper":
@@ -126,6 +127,7 @@ def _transcribe(frames: list, fmt, channels: int, rate: int, sample_width: int) 
                     beam_size=5,
                     vad_filter=True,
                     condition_on_previous_text=False,
+                    language=lang
                 )
                 text = "".join(s.text for s in segments).strip()
 
@@ -141,7 +143,7 @@ def _transcribe(frames: list, fmt, channels: int, rate: int, sample_width: int) 
                 print(t("ears.whisper_error", e=e))
                 return ""
 
-    # ── Google STT (somente se motor = google no painel) ─────────────
+    # ── Google STT (only if engine = google in dashboard) ────────────
     if engine == "google":
         try:
             import speech_recognition as sr
@@ -204,7 +206,7 @@ def listen_button(message: str, button: str) -> str:
             except Exception:
                 break
 
-        print("⏳ [Button] Released — processing...")
+        print(t("ears.button_released"))
     finally:
         if stream:
             stream.stop_stream()
@@ -214,7 +216,7 @@ def listen_button(message: str, button: str) -> str:
     return _transcribe(frames, FORMAT, CHANNELS, RATE,
                        pyaudio.PyAudio().get_sample_size(FORMAT))
 
-# Portuguese alias for compatibility with main.py
+# Backward compatibility alias
 ouvir_microfone = listen_button
 
 
@@ -235,14 +237,14 @@ def listen_continuous_vad() -> str:
 
     vad = _load_vad()
     if not vad:
-        print("⚠️ [VAD] Model unavailable — falling back to button mode.")
+        print(t("ears.vad_fallback"))
         return ""
 
     try:
         import torch
         import numpy as np
     except ImportError:
-        print("❌ [VAD] torch/numpy not installed. Run: pip install torch numpy")
+        print(t("ears.vad_deps_missing"))
         return ""
 
     FORMAT   = pyaudio.paInt16
@@ -259,8 +261,8 @@ def listen_continuous_vad() -> str:
 
     global _interrupt_flag
 
-    # Evita import circular: mouth não importa ears.
-    from mouth import is_speaking as _ai_is_speaking
+    # Avoid circular import: mouth doesn't import ears
+    from core.mouth import is_speaking as _ai_is_speaking
 
     import time
 
@@ -305,12 +307,9 @@ def listen_continuous_vad() -> str:
                 confidence = vad(torch.from_numpy(audio_np), RATE).item()
 
             if confidence > 0.5:
-                # Eco: o microfone ouve o TTS dos alto-falantes e o VAD acha que é o usuário —
-                # não iniciar gravação nem parar o mixer enquanto a IA ainda está falando.
                 if speaking_now:
                     silence_count = 0
                     continue
-                # Eco residual logo após o TTS parar
                 if (not recording
                         and time.monotonic() < _post_tts_cooldown_until):
                     silence_count = 0
@@ -333,7 +332,7 @@ def listen_continuous_vad() -> str:
                         break
 
     except Exception as e:
-        print(f"❌ [VAD] Capture error: {e}")
+        print(t("ears.vad_capture_error", e=e))
     finally:
         if stream:
             stream.stop_stream()
@@ -345,5 +344,5 @@ def listen_continuous_vad() -> str:
                            pyaudio.PyAudio().get_sample_size(FORMAT))
     return ""
 
-# Portuguese alias for compatibility with main.py
+ouvir_microfone = listen_button
 ouvir_continuo_vad = listen_continuous_vad

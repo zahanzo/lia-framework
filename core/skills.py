@@ -11,8 +11,8 @@ Chat mode can be activated by:
 """
 
 import random
-import config
-from i18n import t
+import core.config as config
+from core.i18n import t
 
 # ==========================================
 # CHAT MODE STATE
@@ -42,8 +42,6 @@ def activate():
     )
     print(t("skills.activated"))
 
-ativar_modo_batepapo = activate
-
 
 def deactivate():
     global CHAT_MODE_ACTIVE
@@ -53,8 +51,6 @@ def deactivate():
         ("chat_mode", "0")
     )
     print(t("skills.deactivated"))
-
-desativar_modo_batepapo = deactivate
 
 
 def sync_state():
@@ -66,8 +62,6 @@ def sync_state():
     )
     CHAT_MODE_ACTIVE = bool(res and res[0][0] == "1")
 
-sincronizar_estado = sync_state
-
 
 def toggle() -> bool:
     """Toggle chat mode and return the new state."""
@@ -76,8 +70,6 @@ def toggle() -> bool:
     else:
         activate()
     return CHAT_MODE_ACTIVE
-
-toggle_modo_batepapo = toggle
 
 
 # ==========================================
@@ -127,8 +119,6 @@ def roll_skill() -> dict | None:
     print(t("skills.rolled", id=skill["id"], cooldowns=list(_cooldowns.keys())))
     return skill
 
-sortear_skill = roll_skill
-
 
 # ==========================================
 # PROMPT INJECTION
@@ -147,8 +137,6 @@ def get_prompt_injection() -> str:
     """Roll a skill and return the formatted instruction. Empty string if mode is off."""
     skill = roll_skill()
     return build_skill_instruction(skill) if skill else ""
-
-obter_injencao_prompt = get_prompt_injection
 
 
 # ==========================================

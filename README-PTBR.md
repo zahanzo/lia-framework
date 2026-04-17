@@ -1,197 +1,151 @@
-#  L.I.A. (Local Intelligent Assistant) — Um framework de IA modular e multimodal com suporte a plugins MCP.
+# L.I.A. (Local Intelligent Assistant) / Maya Framework
 
-Um assistente de IA local que roda no seu desktop, ouve sua voz, responde naturalmente, lembra de conversas e pode controlar seu computador através de plugins customizados.
+Um framework de IA modular e multimodal concebido para correr localmente no teu computador. Ouve a tua voz, responde de forma natural, lembra-se das conversas e pode controlar o teu computador através de um sofisticado sistema de plugins baseado no Model Context Protocol (MCP).
 
-Suporte nativo para Português (BR) e Inglês.
+Suporta Português (BR/PT) e Inglês de forma nativa.
 
 https://github.com/user-attachments/assets/2fabac71-d281-41f8-9adb-8b413c03a349
 
-Nesta demonstração rápida, o LIA executa:
-1. **Dynamic Tooling:** Registro de ferramentas customizadas (`see_screen`, `abrir_app`, `youtube`) direto pelo Dashboard, sem recompilar o servidor.
-2. **Local Execution:** O LIA abrindo o VS Code nativamente no ambiente do usuário.
-3. **Web Automation:** A Maya acionando um script Python em background para buscar e tocar música no YouTube.
-4. **Contextual Memory:** A IA entendendo o fluxo contínuo e aplicando a personalidade "Maya" em cada resposta.
+Nesta breve demonstração, a LIA executa:
+1. **Ferramentas Dinâmicas:** Registo de ferramentas personalizadas (`see_screen`, `abrir_app`, `youtube`) diretamente através do Dashboard, sem necessidade de recompilar o servidor.
+2. **Execução Local:** A LIA a abrir o VS Code de forma nativa no ambiente do utilizador.
+3. **Automação Web:** A Maya a acionar um script Python em segundo plano para pesquisar e reproduzir música no YouTube.
+4. **Memória Contextual:** A IA a manter o contexto ao longo do fluxo contínuo e a aplicar a personalidade "Maya" a todas as respostas.
 
 ---
 
-## Recursos
+## 🚀 Principais Funcionalidades
 
-- **Entrada de voz** — push-to-talk (botão do mouse) ou contínuo (VAD com Silero)
-- **Múltiplos motores TTS** — Edge-TTS (padrão), ElevenLabs, Kokoro, Piper
-- **Múltiplos motores STT** — Whisper (local), Google STT
-- **Memória Semântica (RAG)** — lembra de fatos entre diferentes conversas
-- **Sistema de plugins MCP** — adicione ferramentas pelo painel (abrir apps, pesquisar na web, etc.)
-- **Visão de tela** — a IA pode analisar sua tela sob demanda
-- **Modo Roleplay** — mude para uma persona customizada através do painel
-- **Dashboard Web** — configure tudo diretamente no navegador (http://localhost:8000)
-- **Lip sync com VTube Studio** — anima a boca do seu avatar Live2D quando a IA fala
-- **Múltiplos provedores de IA** — Groq, OpenRouter, OpenAI, local (Ollama)
-- **Interface Bilíngue** — Português (BR) e Inglês
-
-### 🔍 Detalhamento das Funcionalidades
-
-* **Modo Foco (Focus Mode):** Quando você precisa se concentrar, este modo torna a IA extremamente concisa. Ele suprime comportamentos proativos e garante que a assistente só fale quando chamada diretamente, agindo como uma ajudante silenciosa e eficiente.
-* **Watchdog Proativo:** Se ativado, a IA roda um loop em segundo plano verificando o tempo de inatividade. Se você não interagir por um tempo, a assistente pode puxar assunto proativamente, tornando a IA muito mais "viva" e engajada.
-* **Não Perturbe (DND) Automático:** O assistente detecta automaticamente se você está em reuniões ativas (Zoom, Google Meet, Teams). Quando uma reunião é detectada, o DND é ativado, silenciando qualquer interrupção proativa.
-* **Roleplay & Gestão de Persona:** Vá além de um assistente padrão. Você pode criar cenários customizados, definir quem a IA é e quem *você* é na história. Isso substitui o prompt de sistema padrão para interações imersivas e criativas (com uma chave NSFW opcional para liberdade total).
-* **Modo Bate-papo (Skills Rotativas):** Para evitar que conversas casuais pareçam robóticas, este modo aplica "skills" ocultas ao prompt da IA a cada turno (ex: "seja irônica", "faça uma pergunta curiosa"). Elas rotacionam dinamicamente com tempos de recarga, garantindo um diálogo variado e natural.
-* **Memória Semântica (RAG):** O assistente extrai automaticamente fatos concretos das suas conversas (preferências, projetos, hardware) e os salva usando embeddings vetoriais locais (`sentence-transformers`). Ao fazer uma pergunta relacionada no futuro, ele busca esses fatos para dar respostas altamente personalizadas sem que você precise se repetir.
-* **Visão em Segundo Plano:** Além da captura manual, o assistente pode ser configurado para monitorar mudanças na tela passivamente. Se houver uma alteração visual significativa, ele atualiza seu contexto interno, permitindo que "veja" o que você está fazendo antes mesmo de você perguntar.
+* **Interação Multimodal:** Suporta entrada de voz via push-to-talk ou VAD contínuo (Silero). Inclui suporte para vários motores de STT (Whisper, Google) e TTS (Edge-TTS, ElevenLabs, Kokoro, Piper).
+* **Loja de Plugins da Comunidade:** Navega, instala e gere ferramentas MCP personalizadas diretamente na interface (UI). Criaste uma ferramenta fixe? Usa o botão integrado **"Generate GitHub Issue"** para empacotar instantaneamente o teu código, schema JSON e dependências, submetendo-a para a loja da comunidade.
+* **Memória Semântica (RAG):** Extrai e guarda automaticamente factos das tuas conversas usando embeddings vetoriais locais (`sentence-transformers`) e SQLite para respostas futuras altamente personalizadas.
+* **Visão de Ecrã:** Pode analisar o conteúdo do ecrã a pedido ou monitorizar alterações passivamente em segundo plano para manter o contexto visual sem precisares de pedir.
+* **Diversos Motores de IA:** Suporte nativo para Groq, OpenRouter, OpenAI e provedores locais como Ollama ou LM Studio.
+* **Modo Roleplay:** Cria e ativa cenários e personas personalizadas, substituindo completamente o prompt de sistema padrão.
+* **Watchdog Proativo:** Um loop em segundo plano opcional que permite à IA iniciar uma conversa após períodos de inatividade.
+* **DND Automático (Não Incomodar):** Deteta reuniões ativas (Zoom, Meet, Teams) e silencia interrupções proativas automaticamente.
+* **Sincronização Labial VTube Studio:** Anima a boca de avatares Live2D em sincronia com a fala da IA.
 
 ---
 
-## Requisitos
+## 🖥️ Hardware Recomendado
 
-- Windows 10/11
-- Python 3.10.11 (recomendado — [download](https://www.python.org/downloads/release/python-31011/))
-- Um microfone (opcional, mas recomendado)
-- Chave de API de pelo menos um provedor de IA (Groq é gratuito)
+Para garantir uma experiência fluida com o L.I.A., especialmente ao usar funcionalidades de Visão e RAG (Memória Semântica) em conjunto com modelos de IA locais:
+
+* **GPU:** NVIDIA (Série RTX 30 ou mais recente) ou AMD (Série RX 6000 ou mais recente) é altamente recomendada.
+* **VRAM (Mínimo):** **8GB de VRAM** para correr confortavelmente modelos mais pequenos (como Llama 3 8B ou Mistral 7B) com uma janela de contexto estável.
+* **VRAM (Ideal):** **12GB ou mais** (ex: uma RTX 3060 12GB) para suportar totalmente as capacidades de Visão e múltiplos plugins MCP em simultâneo sem estrangulamentos de memória.
+* **RAM do Sistema:** 16GB ou superior.
 
 ---
 
-## Início Rápido
+## ⚙️ Início Rápido
 
-**1. Clone o repositório**
+**1. Clonar o repositório**
 ```bash
-git clone https://github.com/zahanzo/lia-framework
+git clone https://github.com/your-username/lia-framework
 cd lia-framework
 ```
 
-**2. Crie um ambiente virtual (recomendado)**
+**2. Criar um ambiente virtual (recomendado)**
 ```bash
 python -m venv .venv
-.venv\Scripts\activate       # Windows
+.venv\Scripts\activate
 ```
 
-**3. Instale as dependências principais**
+**3. Instalar dependências**
 ```bash
 pip install -r requirements.txt
 ```
 
-**4. Instale os recursos opcionais que desejar**
-```bash
-pip install pyaudio                          # entrada de microfone
-pip install faster-whisper torch torchaudio  # reconhecimento de voz local
-pip install sentence-transformers numpy      # memória semântica
-pip install mss                              # visão de tela
-```
-
-**5. Rode o setup**
+**4. Executar a configuração**
 ```bash
 python setup.py
 ```
-Escolha seu idioma (EN ou PT-BR). Isso cria o banco de dados e insere a persona padrão.
+*Escolhe o teu idioma (EN ou PT-BR). Isto cria a base de dados e insere uma persona padrão.*
 
-**6. Adicione suas chaves de API**
+**5. Iniciar o Dashboard Web**
 ```bash
 python webui.py
 ```
-Abra http://localhost:8000 → Aba Sistema → Chaves de API.
-No mínimo, adicione uma chave do **Groq** (grátis em [console.groq.com](https://console.groq.com)).
+*Abre `http://localhost:8000` → Separador System → API Keys. Adiciona pelo menos uma chave de provedor (ex: Groq).*
 
-**7. Inicie o assistente**
+**6. Iniciar o assistente**
 ```bash
 python main.py
 ```
 
 ---
 
-## Atalhos de Teclado
+## ⌨️ Atalhos de Teclado
 
 | Atalho | Ação |
 |---|---|
-| Segurar `X` | Falar com a assistente |
-| Segurar `X2` (botão lateral do mouse) | Pedir para a IA analisar sua tela |
+| Segurar `X` | Falar com o assistente |
+| Segurar `X2` (botão lateral do rato) | Pedir à IA para analisar o ecrã |
 | `Ctrl+Alt+M` | Abrir o dashboard |
-| `Ctrl+Alt+F` | Alternar Modo Foco |
+| `Ctrl+Alt+F` | Alternar o Modo Foco |
 
 ---
 
-## Dashboard
+## 🧩 Ferramentas Avançadas e Plugins MCP
 
-Inicie o dashboard com `python webui.py` e abra http://localhost:8000.
+O assistente suporta ferramentas personalizadas através do Model Context Protocol (MCP). Podes adicionar ou gerir plugins diretamente através do separador Plugins no dashboard. Cada plugin é um trecho de código Python que é executado quando a IA aciona a ferramenta correspondente.
 
-Pelo dashboard você pode:
-- Configurar provedor e modelos de IA (Geral, Visão, Código, Roleplay)
-- Inserir chaves de API
-- Configurar motor de voz e transcrição (STT)
-- Gerenciar a persona da IA e o prompt
-- Visualizar e apagar memórias
-- Criar e editar plugins MCP
-- Alternar Modo Foco, Watchdog, visão em segundo plano e lip sync
+### Sistema de Ferramentas em Camadas
+O L.I.A. implementa uma hierarquia de ferramentas estruturada para otimizar o contexto da IA:
+1.  **Ferramentas Globais:** Sempre disponíveis.
+2.  **Ferramentas Contextuais:** Ativas apenas quando um "Master" específico (ex: `typing_control`) está ativado.
+3.  **Recuperação Semântica:** Usa RAG para encontrar e injetar apenas as ferramentas mais relevantes para a consulta do utilizador, evitando o excesso de contexto.
 
----
+### Respostas Fast-Track vs. Agênticas
+Ao escreveres os teus próprios plugins Python no dashboard, podes otimizar a latência e o uso de tokens utilizando a tag `[DIRECT]`.
 
-## Plugins MCP
-O assistente suporta ferramentas personalizadas através do Model Context Protocol. Você pode adicionar ou gerenciar plugins diretamente através da aba Plugins no dashboard. Cada plugin é um snippet de Python que executa quando a IA aciona a ferramenta correspondente.
-
-Exemplo de Uso
-Ao criar uma ferramenta para abrir um aplicativo, você pode utilizar a seguinte lógica:
-
+* **Fast-Track (tag `[DIRECT]`):** Se a resposta da tua ferramenta começar com `[DIRECT]`, o sistema remove a tag e envia o texto imediatamente para o chat. Isto ignora a segunda chamada ao LLM, garantindo feedback instantâneo para ações simples (ex: abrir ficheiros).
 ```python
 import subprocess
-```
-
-# A variável 'arguments' contém os parâmetros da ferramenta
-```python
 app_name = arguments.get("app_name")
-```
-# Execução de fluxo rápido usando a tag [DIRECT]
-```python
 subprocess.Popen(["code"]) 
-ai_response = f"[DIRECT] Abri o {app_name} para você agora mesmo!"
+ai_response = f"[DIRECT] O {app_name} foi aberto com sucesso para ti!"
 ```
 
-Lógica de Resposta: Fluxo Rápido vs. Agêntico
-Para otimizar a latência e o consumo de tokens, o framework manipula a variável ai_response baseando-se na presença de uma tag específica:
-
-- Fluxo Rápido (Tag `[DIRECT]`): Se a resposta começar com `[DIRECT]`, o sistema remove a tag e envia o texto imediatamente para o chat. Isso pula a segunda chamada à LLM, garantindo feedback instantâneo para ações simples (ex: abrir arquivos, alterar configurações de hardware).
-
-- Fluxo Agêntico (Padrão): Se a tag for omitida, o framework trata a saída como dados técnicos. Esses dados são enviados de volta para a LLM para uma segunda passagem, permitindo que o assistente interprete os resultados e forneça uma resposta natural e contextualizada.
-
-Ambiente de Plugins
-Os seguintes recursos estão disponíveis dentro do sandbox de plugins:
-
-Bibliotecas: `os`, `sys`, `subprocess`, `requests`, `time`, `pyautogui`, `webbrowser`, `json`.
-
-Contexto: arguments (dicionário contendo os parâmetros da ferramenta).
-
-Banco de Dados: `run_db` (função para interagir com o banco de dados interno do sistema).
+* **Caminho Agêntico (Padrão):** Se a tag for omitida, o framework trata a saída como dados técnicos. Estes dados são enviados de volta ao LLM para uma segunda passagem, permitindo que o assistente interprete os resultados e forneça uma resposta natural e ciente do contexto.
 
 ---
 
-## Estrutura do Projeto
+## 🔑 Provedores de IA Suportados
+
+| Provedor | Prefixo da Chave | Notas |
+|---|---|---|
+| **Groq** | `gsk_...` | Escalão gratuito disponível, inferência extremamente rápida. |
+| **OpenRouter** | `sk-or-...` | Acesso a mais de 100 modelos de vários provedores. |
+| **OpenAI** | `sk-...` | Acesso padrão ao GPT-4o, o1, etc. |
+| **Local (Ollama/LM Studio)** | `N/A` | Corre de forma 100% offline para máxima privacidade. |
+
+---
+
+## 📦 Estrutura do Projeto
 
 ```text
 ai-assistant/
-├── main.py              # loop principal — áudio, chamadas de IA, orquestração MCP
-├── config.py            # estado global, banco de dados, histórico
-├── webui.py             # dashboard FastAPI (http://localhost:8000)
-├── server_mcp.py        # servidor de ferramentas MCP (stdio)
-├── mouth.py             # fila e reprodução do motor TTS
+├── main.py              # Loop principal — entrada de voz, chamadas de IA, orquestração MCP
+├── config.py            # Estado global, ajudantes de BD (SQLite), gestão de histórico
+├── webui.py             # Dashboard FastAPI (http://localhost:8000)
+├── server_mcp.py        # Servidor de ferramentas MCP (stdio)
+├── mouth.py             # Fila do motor TTS e reprodução
 ├── ears.py              # STT — Whisper, Google, VAD
-├── eyes.py              # captura e análise de tela
-├── memory.py            # memória semântica (RAG) com embeddings
-├── skills.py            # injeções rotativas de skills de bate-papo
-├── lipsync.py           # lip sync via WebSocket para VTube Studio
-├── i18n.py              # traduções EN / PT-BR
-├── web_input_watcher.py # monitora input_web.json para comandos do dashboard
-├── setup.py             # assistente de configuração inicial
-└── requirements.txt     # dependências
+├── eyes.py              # Captura de ecrã e análise de visão
+├── memory.py            # Memória semântica (RAG) com embeddings
+├── skills.py            # Injeções rotativas de habilidades de chat
+├── lipsync.py           # Sincronização labial via WebSocket para VTube Studio
+├── i18n.py              # Traduções EN / PT-BR
+├── web_input_watcher.py # Monitoriza o input_web.json para mensagens do dashboard
+├── setup.py             # Assistente de configuração inicial
+└── requirements.txt     # Dependências
 ```
 
 ---
 
-## Provedores de IA
+## 📜 Licença
 
-| Provedor | Prefixo da chave | Notas |
-|---|---|---|
-| **Groq** | `gsk_...` | Plano gratuito, muito rápido, recomendado |
-| **OpenRouter** | `sk-or-...` | Acesso a mais de 100 modelos |
-| **OpenAI** | `sk-...` | GPT-4o, o1, etc. |
-
----
-
-## Licença
-
-GNU AGPLv3
+Licenciado sob **GNU AGPLv3**.

@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Assistant</title>
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/store.css">
+    <!-- Module preloads for performance -->
+    <link rel="modulepreload" href="/static/js/api.js">
+    <link rel="modulepreload" href="/static/js/i18n.js">
+    <link rel="modulepreload" href="/static/js/main.js">
+    <!-- Skeleton loading styles (inline for immediate effect) -->
+    <style>
+        .skeleton-screen {
+            position: fixed;
+            inset: 0;
+            background: var(--bg, #0a0e14);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        .skeleton-content {
+            text-align: center;
+            color: var(--text, #e6edf3);
+        }
+        .skeleton-logo {
+            font-size: 48px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+        <!-- Scripts: i18n and store (global functions), then main module -->
+</head>
+<body>
+    <!-- Skeleton loader (removed after boot) -->
+    <div id="skeleton-screen" class="skeleton-screen">
+        <div class="skeleton-content">
+            <div class="skeleton-logo">🤖</div>
+            <div>Loading...</div>
+        </div>
+    </div>
+    <script>
+        // Fallback removal if boot.js doesn't handle it
+        window.addEventListener('DOMContentLoaded', () => {
+            setTimeout(() => {
+                const skeleton = document.getElementById('skeleton-screen');
+                if (skeleton) skeleton.remove();
+            }, 100);
+        });
+    </script>
+
+    <!-- Global toast notification container -->
+    <div id="toast" role="status" aria-live="polite"></div>
+
+    <!-- Main application container -->
+    <div id="app">
+
+        <!-- ========================================== -->
+        <!-- SIDEBAR NAVIGATION (DESKTOP)                -->
+        <!-- ========================================== -->
+        <nav id="sidebar">
+            <div class="sidebar-logo">
+                <div class="logo-icon">🤖</div>
+                <div>
+                    <div class="logo-text" id="sidebar-ai-name">Assistant</div>
+                    <div class="logo-sub">AI Framework</div>
+                </div>
+            </div>
+
+            <!-- Primary navigation items -->
+            <div class="nav-item active" data-panel="chat" onclick="showPanel('chat',this)">
+                <span class="nav-icon">💬</span>
+                <span class="nav-label" data-i18n="nav.chat">Chat</span>
+            </div>
+
+            <div class="nav-section" data-i18n="nav.section_config">Configuration</div>
+
+            <div class="nav-item" data-panel="sistema" onclick="showPanel('sistema',this)">
+                <span class="nav-icon">⚙️</span>
+                <span class="nav-label" data-i18n="nav.system">System</span>
+            </div>
+            <div class="nav-item" data-panel="persona" onclick="showPanel('persona',this)">
+                <span class="nav-icon">🎭</span>
+                <span class="nav-label" data-i18n="nav.persona">Persona</span>
+            </div>
+            <div class="nav-item" data-panel="plugins" onclick="showPanel('plugins',this)">
+                <span class="nav-icon">🔌</span>
+                <span class="nav-label" data-i18n="nav.plugins_mcp">Plugins MCP</span>
+            </div>
+            <div class="nav-item" data-panel="store" onclick="showPanel('store',this)">
+                <span class="nav-icon">🛒</span>
+                <span class="nav-label">Store</span>
+            </div>
+            <div class="nav-item" data-panel="roleplay" onclick="showPanel('roleplay',this)">
+                <span class="nav-icon">🔞</span>
+                <span class="nav-label" data-i18n="nav.roleplay">Roleplay</span>
+            </div>
+
+            <div class="nav-section" data-i18n="nav.section_data">Data</div>
+
+            <div class="nav-item" data-panel="visao" onclick="showPanel('visao',this)">
+                <span class="nav-icon">👁️</span>
+                <span class="nav-label" data-i18n="nav.vision">Vision</span>
+            </div>
+            <div class="nav-item" data-panel="memorias" onclick="showPanel('memorias',this)">
+                <span class="nav-icon">🧠</span>
+                <span class="nav-label" data-i18n="nav.memory">Memory</span>
+            </div>
+
+            <!-- Sidebar bottom status controls -->
+            <div class="sidebar-bottom">
+                <div class="status-pills">
+                    <div class="status-pill off" id="pill-foco" onclick="toggleModo('foco')">
+                        <div class="pill-dot"></div>
+                        <span data-i18n="sys.focus_mode">Focus Mode</span>
+                    </div>
+                    <div class="status-pill off" id="pill-dnd" onclick="toggleModo('nao_perturbe')">
+                        <div class="pill-dot"></div>
+                        <span data-i18n="sys.dnd_mode">Do Not Disturb</span>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Sidebar toggle button (desktop only) -->
+        <button id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar">‹</button>
+
+        <!-- ========================================== -->
+        <!-- MAIN CONTENT AREA                          -->
+        <!-- ========================================== -->
+        <div id="main">
+
+            <!-- Top bar with title and mode badges -->
+            <div id="topbar">
+                <div class="topbar-brand" id="topbar-brand" role="button" tabindex="0"
+                     data-i18n-title="nav.back_to_chat" title="Back to chat"
+                     onclick="showPanel('chat', null)"
+                     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showPanel('chat',null);}">
+                    <div class="topbar-title" id="topbar-ai-name">Assistant</div>
+                    <div class="topbar-sub" id="topbar-section">Chat</div>
+                </div>
+                <div class="topbar-spacer"></div>
+                <div class="topbar-mode-badge" id="badge-foco">🎯 <span data-i18n="sys.focus_mode">Focus Mode</span></div>
+                <div class="topbar-mode-badge" id="badge-dnd">🔕 <span data-i18n="sys.dnd_mode">Do Not Disturb</span></div>
+            </div>
+
+            <!-- Panel container -->
+            <div id="panels">
+
+                <!-- ========================================== -->
+                <!-- CHAT PANEL                                 -->
+                <!-- ========================================== -->
+                <div class="panel active" id="panel-chat">
+                    <div class="chat-header">
+                        <div class="ai-avatar">🤖</div>
+                        <div class="ai-info">
+                            <div class="ai-name" id="chat-ai-name">Assistant</div>
+                            <div class="ai-status">online</div>
+                        </div>
+                        <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+                            <button id="btn-batepapo" onclick="toggleBatepapo()"
+                                    title="Chat Mode — rotating skills for casual conversation"
+                                    data-i18n-title="chat.mode_tooltip"
+                                    style="padding:5px 12px;border-radius:99px;border:1px solid var(--border2);
+                                           background:transparent;color:var(--muted);font-size:12px;
+                                           font-weight:600;cursor:pointer;transition:0.2s;display:flex;align-items:center;gap:5px">
+                                💬 Chat Mode
+                            </button>
+                            <button class="btn-clear-chat" onclick="limparChat()" data-i18n="chat.clear">🗑 Clear</button>
+                        </div>
+                    </div>
+                    <div class="chat-messages" id="chat-messages">
+                        <div class="empty-state">
+                            <div class="es-icon">💬</div>
+                            <p data-i18n="chat.empty">No messages yet.<br>Start the conversation!</p>
+                        </div>
+                    </div>
+                    <div id="chat-status">
+                        <div class="status-dot"></div>
+                        <span id="chat-status-text"></span>
+                    </div>
+                    <div class="file-preview-strip" id="file-preview-strip"></div>
+                    <div class="chat-input-wrap">
+                        <input type="file" id="file-input" multiple
+                               accept="image/*,.pdf,.txt,.py,.js,.ts,.json,.csv,.md,.docx,.xlsx"
+                               style="display:none" onchange="arquivosSelecionados(this)">
+                        <button class="btn-icon" onclick="document.getElementById('file-input').click()" title="Attach file">📎</button>
+                        <button class="btn-icon" id="btn-mic" onclick="toggleGravacao()" title="Voice">🎤</button>
+                        <input class="chat-input" id="chat-input" placeholder="Type a message…" data-i18n-placeholder="chat.placeholder"
+                               onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();enviarMensagem()}">
+                        <button class="btn-send" onclick="enviarMensagem()" title="Send">➤</button>
+                    </div>
+                </div>
+
+                <!-- ========================================== -->
+                <!-- SYSTEM SETTINGS PANEL                      -->
+                <!-- ========================================== -->
+                <div class="panel" id="panel-sistema">
+                    <div class="panel-body">
+
+                        <!-- Language selection -->
+                        <div class="card">
+                            <div class="card-title"><span class="ct-icon">🌐</span> Language / Idioma</div>
+                            <div class="form-row">
+                                <label class="form-label">Interface & terminal language</label>
+                                <select class="form-select" id="ui_language" onchange="trocarIdioma(this.value)">
+                                    <option value="en">🇺🇸 English</option>
+                                    <option value="pt">🇧🇷 Português (BR)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- AI Engine configuration -->
+                        <div class="card">
+                            <div class="card-title"><span class="ct-icon">🤖</span> <span data-i18n="sys.ai_engine">AI Engine</span></div>
+                            <div class="form-row">
+                                <label class="form-label" data-i18n="sys.provider">Provider</label>
+                                <select class="form-select" id="modo_ia" onchange="verificarMotor()">
+                                    <option value="groq">Groq</option>
+                                    <option value="openrouter">OpenRouter</option>
+                                    <option value="openai">OpenAI</option>
+                                    <option value="local_lm">Local (LM Studio)</option>
+                                    <option value="local_ollama">Local (Ollama)</option>
+                                </select>
+                            </div>
+                            <div id="bloco_modelo_local" style="display:none">
+                                <div class="form-row">
+                                    <label class="form-label" data-i18n="sys.local_model">Local Model</label>
+                                    <select class="form-select" id="modelo_ia_local"></select>
+                                </div>
+                            </div>
+                            <div id="bloco_especialistas">
+                                <div class="form-row">
+                                    <label class="form-label" data-i18n="sys.main_model">Default Model</label>
+                                    <select class="form-select" id="modelo_principal"></select>
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" data-i18n="sys.vision_model">Vision Specialist</label>
+                                    <select class="form-select" id="modelo_visao"></select>
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" data-i18n="sys.code_model">Code Specialist</label>
+                                    <select class="form-select" id="modelo_codigo"></select>
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" data-i18n="sys.roleplay_model">Roleplay / Persona Specialist</label>
+                                    <select class="form-select" id="modelo_roleplay"></select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- API Keys -->
+                        <div class="card">
+                            <div class="card-title"><span class="ct-icon">🔑</span> <span data-i18n="sys.api_keys">API Keys</span></div>
+                            <div class="form-row">
+                                <label class="form-label">OpenRouter</label>
+                                <div class="api-row"><input class="form-input" type="password" id="api_openrouter" placeholder="sk-or-..."><button class="api-eye" onclick="toggleEye(this,'api_openrouter')">👁</button></div>
+                            </div>
+                            <div class="form-row">
+                                <label class="form-label">Groq</label>
+                                <div class="api-row"><input class="form-input" type="password" id="api_groq" placeholder="gsk_..."><button class="api-eye" onclick="toggleEye(this,'api_groq')">👁</button></div>
+                            </div>
+                            <div class="form-row">
+                                <label class="form-label">OpenAI</label>
+                                <div class="api-row"><input class="form-input" type="password" id="api_openai" placeholder="sk-..."><button class="api-eye" onclick="toggleEye(this,'api_openai')">👁</button></div>
+                            </div>
+                            <div class="form-row">
+                                <label class="form-label">ElevenLabs</label>
+                                <div class="api-row"><input class="form-input" type="password" id="api_elevenlabs" placeholder="..."><button class="api-eye" onclick="toggleEye(this,'api_elevenlabs')">👁</button></div>
+                            </div>
+                            <div class="form-row">
+                                <label class="form-label" data-i18n="sys.hf_token">Hugging Face</label>
+                                <div class="api-row"><input class="form-input" type="password" id="api_huggingface" placeholder="hf_..."><button class="api-eye" onclick="toggleEye(this,'api_huggingface')">👁</button></div>
+                                <p class="form-hint" data-i18n="sys.hf_hint">Token for embeddings / gated models. Optional if you only use public weights.</p>
+                            </div>
+                        </div>
+
+                        <!-- Audio settings -->
+                        <div class="card">
+                            <div class="card-title"><span class="ct-icon">🎤</span> <span data-i18n="sys.audio">Audio</span></div>
+                            <div class="form-row">
+                                <label class="form-label" data-i18n="sys.listen_method">Listen Method</label>
+                                <select class="form-select" id="audio_metodo_escuta">
+                                    <option value="atalho" data-i18n="sys.button_mode">Button (X mouse)</option>
+                                    <option value="silero" data-i18n="sys.vad_mode">Continuous (VAD)</option>
+                                </select>
+                            </div>
+                            <div class="form-row">
+                                <label class="form-label" data-i18n="sys.stt_engine">Transcription Engine</label>
+                                <select class="form-select" id="audio_motor_transcricao" onchange="atualizarVisibilidadeSTT()">
+                                    <option value="whisper">Whisper (local)</option>
+                                    <option value="google">Google STT</option>
+                                </select>
+                            </div>
+                            <div class="form-row" id="row_whisper_model">
+                                <label class="form-label" data-i18n="sys.whisper_model">Whisper model size</label>
+                                <select class="form-select" id="audio_whisper_modelo">
+                                    <option value="tiny">tiny (fastest)</option>
+                                    <option value="base">base</option>
+                                    <option value="small">small</option>
+                                    <option value="medium">medium</option>
+                                </select>
+                            </div>
+                            <div class="form-row">
+                                <label class="form-label" data-i18n="sys.tts_engine">Voice Synthesizer</label>
+                                <select class="form-select" id="audio_motor_voz">
+                                    <option value="edge">Edge TTS (online)</option>
+                                    <option value="kokoro">Kokoro TTS (local, high quality)</option>
+                                    <option value="piper">Piper TTS (local, language-native)</option>
+                                    <option value="elevenlabs">ElevenLabs (online, premium)</option>
+                                </select>
+                            </div>
+                            <div class="form-row">
+                                <label class="form-label" data-i18n="sys.edge_voice">Edge TTS Voice</label>
+                                <input class="form-input" id="audio_voz_edge" placeholder="en-US-AriaNeural">
+                            </div>
+                        </div>
+
+                        <!-- Quick modes and system toggles -->
+                        <div class="card">
+                            <div class="card-title"><span class="ct-icon">🧭</span> <span data-i18n="sys.quick_modes">Quick Modes</span></div>
+                            <div class="mode-btns">
+                                <button class="mode-btn" id="btn-foco" onclick="toggleModo('foco')">
+                                    <span class="mbi">🎯</span><span data-i18n="sys.focus_mode">Focus Mode</span>
+                                </button>
+                                <button class="mode-btn" id="btn-dnd" onclick="toggleModo('nao_perturbe')">
+                                    <span class="mbi">🔕</span><span data-i18n="sys.dnd_mode">Do Not Disturb</span>
+                                </button>
+                            </div>
+                            <div style="height:12px"></div>
+                            <div class="toggle-row">
+                                <div>
+                                    <div class="toggle-label" data-i18n="sys.watchdog">🐕 Proactive Watchdog</div>
+                                    <div class="toggle-sub" data-i18n="sys.watchdog_sub">AI checks in periodically</div>
+                                </div>
+                                <label class="toggle"><input type="checkbox" id="watchdog_ativo"><span class="toggle-slider"></span></label>
+                            </div>
+                            <div class="form-row" style="margin-top:10px">
+                                <label class="form-label" data-i18n="sys.watchdog_interval">Watchdog Interval (minutes)</label>
+                                <input class="form-input" type="number" id="watchdog_intervalo" min="1" max="120" value="10">
+                            </div>
+                            <div style="height:12px"></div>
+                            <div class="toggle-row">
+                                <div>
+                                    <div class="toggle-label" data-i18n="sys.vision_bg">👁️ Background Screen Analysis</div>
+                                    <div class="toggle-sub" data-i18n="sys.vision_bg_sub">AI monitors screen context automatically (uses tokens)</div>
+                                </div>
+                                <label class="toggle"><input type="checkbox" id="vision_bg_ativo"><span class="toggle-slider"></span></label>
+                            </div>
+                            <div style="height:12px"></div>
+                            <div class="toggle-row">
+                                <div>
+                                    <div class="toggle-label" data-i18n="sys.lipsync">🎤 VTube Studio Lip Sync</div>
+                                    <div class="toggle-sub" data-i18n="sys.lipsync_sub">Animate model mouth when AI speaks (requires VTube Studio)</div>
+                                </div>
+                                <label class="toggle"><input type="checkbox" id="lipsync_ativo"><span class="toggle-slider"></span></label>
+                            </div>
+                            <div class="form-row">
+                                <label class="form-label" data-i18n="sys.mood">Current Mood / Vibe</label>
+                                <input class="form-input" id="humor_ia" placeholder="e.g. Friendly, Focused, Playful…">
+                            </div>
+                        </div>
+
+                        <button class="btn-save-all" onclick="salvarTudo()" data-i18n="sys.save">💾 Save Settings</button>
+                    </div>
+                </div>
+
+                <!-- ========================================== -->
+                <!-- PERSONA PANEL                              -->
+                <!-- ========================================== -->
+                <div class="panel" id="panel-persona">
+                    <div class="panel-body">
+                        <div class="card">
+                            <div class="card-title"><span class="ct-icon">🤖</span> <span data-i18n="persona.identity">Identity</span></div>
+                            <div class="form-row">
+                                <label class="form-label" data-i18n="persona.ai_name">AI Name</label>
+                                <input class="form-input" id="nome_ia" placeholder="Assistant name">
+                            </div>
+                            <div class="form-row">
+                                <label class="form-label" data-i18n="persona.system_prompt">System Prompt</label>
+                                <textarea class="form-textarea" id="prompt_sistema" style="min-height:160px"></textarea>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-title"><span class="ct-icon">⚡</span> <span data-i18n="persona.skills">Skills</span></div>
+                            <div id="skills-container"></div>
+                            <div style="display:flex;gap:8px;margin-top:8px">
+                                <input class="form-input" id="new_skill_id" placeholder="ID" style="width:35%">
+                                <input class="form-input" id="new_skill_text" data-i18n-placeholder="persona.skill_desc" placeholder="Description">
+                            </div>
+                            <button class="btn btn-ghost btn-full" style="margin-top:8px" onclick="adicionarSkill()" data-i18n="persona.add_skill">+ Add Skill</button>
+                        </div>
+                        <button class="btn-save-all" onclick="salvarTudo()" data-i18n="persona.save">💾 Save Persona</button>
+                    </div>
+                </div>
+
+                <!-- ========================================== -->
+                <!-- PLUGINS MCP PANEL                          -->
+                <!-- ========================================== -->
+                <div class="panel" id="panel-plugins">
+                    <div class="panel-body">
+                        <div class="card">
+                            <div class="card-title"><span class="ct-icon">🛠️</span> <span data-i18n="plugins.new">New Tool</span></div>
+                            <div class="form-row">
+                                <label class="form-label" data-i18n="plugins.name">Name / ID</label>
+                                <input class="form-input" id="mcp_nome" placeholder="e.g. open_browser">
+                            </div>
+                            <div class="form-row">
+                                <label class="form-label" data-i18n="plugins.desc">Description (helps AI know when to use it)</label>
+                                <input class="form-input" id="mcp_desc">
+                            </div>
+                            <!-- Master toggle (checkbox) -->
+                            <div class="form-row" style="background: var(--card); padding: 12px; border-radius: 8px; border: 1px solid var(--border); margin: 15px 0;">
+                                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; margin-bottom: 0;">
+                                    <input type="checkbox" id="mcp_is_master" style="cursor: pointer;">
+                                    <div>
+                                        <div style="font-weight: 600; color: var(--text);">🎯 Is it a Master?</div>
+                                        <div style="font-size: 12px; color: var(--muted); margin-top: 4px;">
+                                            Check if this plugin groups other tools
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                            <div class="form-row" id="mcp_parent_row">
+                                <label class="form-label">
+                                    🔗 Parent Master (optional)
+                                    <span style="font-size: 11px; color: var(--muted); font-weight: normal; display: block; margin-top: 4px;">
+                                        Leave empty for global tool, or select a master
+                                    </span>
+                                </label>
+                                <select class="form-select" id="mcp_parent_id">
+                                    <option value="">🌍 Global (always available)</option>
+                                </select>
+                            </div>
+                            <div id="mcp-params-container"></div>
+                            <button class="btn btn-ghost" style="margin-bottom:10px" onclick="adicionarParametroVisual()" data-i18n="plugins.add_param">+ Parameter</button>
+                            <div class="form-row">
+                                <label class="form-label" data-i18n="plugins.pip_req">pip packages (optional)</label>
+                                <textarea class="form-textarea" id="mcp_pip" style="font-family:monospace;font-size:12px;min-height:52px" data-i18n-placeholder="plugins.pip_placeholder" placeholder="e.g. pywhatkit — one per line or comma-separated"></textarea>
+                                <p style="font-size:11px;color:var(--muted);margin:4px 0 0" data-i18n="plugins.pip_hint">Installed automatically before the tool runs (same Python as the assistant).</p>
+                            </div>
+                            <div class="form-row">
+                                <label class="form-label" data-i18n="plugins.code">Python Code</label>
+                                <textarea class="form-textarea" id="mcp_codigo" style="font-family:monospace;font-size:12px;min-height:100px">ai_response = "Action completed successfully!"</textarea>
+                            </div>
+                            <button class="btn btn-primary btn-full" onclick="salvarPluginVisual()" data-i18n="plugins.save">💾 Save Tool</button>
+                        </div>
+                        <div class="card">
+                            <div class="card-title"><span class="ct-icon">🔌</span> <span data-i18n="plugins.installed">Installed</span></div>
+                            <div id="mcp-list"><div class="empty-state"><div class="es-icon">🔌</div><p data-i18n="plugins.empty">No plugins installed.</p></div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ========================================== -->
+                <!-- STORE PANEL                                -->
+                <!-- ========================================== -->
+                <div class="panel" id="panel-store">
+                    <div class="panel-body">
+                        <div class="store-header">
+                            <h2 style="margin-bottom: 15px;" data-i18n="store.title">🛒 Plugin & Master Store</h2>
+                            <div class="store-controls">
+                                <input type="text" id="store-search" data-i18n-placeholder="store.search" placeholder="🔍 Search plugins, masters...">
+                                <select id="store-category">
+                                    <option value="" data-i18n="store.all_categories">All Categories</option>
+                                    <option value="system" data-i18n="store.cat_system">System</option>
+                                    <option value="media" data-i18n="store.cat_media">Media</option>
+                                    <option value="web" data-i18n="store.cat_web">Web</option>
+                                    <option value="automation" data-i18n="store.cat_automation">Automation</option>
+                                </select>
+                                <select id="store-type">
+                                    <option value="all" data-i18n="store.all_types">All</option>
+                                    <option value="plugins" data-i18n="store.plugins">Plugins</option>
+                                    <option value="masters" data-i18n="store.masters">Masters</option>
+                                </select>
+                                <button onclick="showSubmitDialog()" class="btn-submit" data-i18n="store.submit">
+                                    📤 Submit Plugin
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="store-section" id="plugins-section">
+                            <h3 data-i18n="store.plugins_section">🔧 Plugins</h3>
+                            <div id="store-plugins" class="store-grid"></div>
+                        </div>
+
+                        <div class="store-section" id="masters-section">
+                            <h3 data-i18n="store.masters_section">🎯 Masters</h3>
+                            <div id="store-masters" class="store-grid"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ========================================== -->
+                <!-- ROLEPLAY PANEL                             -->
+                <!-- ========================================== -->
+                <div class="panel" id="panel-roleplay">
+                    <div class="panel-body">
+                        <div class="card">
+                            <div class="card-title"><span class="ct-icon">🎬</span> <span data-i18n="rp.active_scenario">Active Scenario</span></div>
+                            <div id="rp-active-display" class="rp-active-card">
+                                <div style="color:var(--muted);font-size:13px" data-i18n="rp.no_active">No roleplay active.</div>
+                            </div>
+                            <button id="btn-desativar-rp" class="btn btn-danger btn-full" style="display:none" onclick="desativarRoleplay()" data-i18n="rp.deactivate">🛑 Deactivate Roleplay</button>
+                        </div>
+                        <div class="card">
+                            <div class="card-title"><span class="ct-icon">✏️</span> <span data-i18n="rp.create">Create Scenario</span></div>
+                            <div class="form-row">
+                                <label class="form-label" data-i18n="rp.name">Scenario Name</label>
+                                <input class="form-input" id="rp_nome" placeholder="e.g. Medieval Castle, Cyberpunk…">
+                            </div>
+                            <div class="form-row">
+                                <label class="form-label" data-i18n="rp.ai_persona">AI Persona (who the AI will be)</label>
+                                <textarea class="form-textarea" id="rp_persona_ia" placeholder="e.g. You are Lyra, an elven archer…"></textarea>
+                            </div>
+                            <div class="form-row">
+                                <label class="form-label" data-i18n="rp.user_persona">User Persona (who you will be)</label>
+                                <textarea class="form-textarea" id="rp_persona_usuario" placeholder="e.g. You are Kael, a knight…"></textarea>
+                            </div>
+                            <div class="form-row">
+                                <label class="form-label" data-i18n="rp.setting">Setting / Scenario</label>
+                                <textarea class="form-textarea" id="rp_cenario" placeholder="e.g. A dark tavern on the frontier…"></textarea>
+                            </div>
+                            <div class="toggle-row">
+                                <div class="toggle-label" style="color:var(--red)" data-i18n="rp.nsfw">🔞 NSFW Content</div>
+                                <label class="toggle"><input type="checkbox" id="rp_nsfw"><span class="toggle-slider"></span></label>
+                            </div>
+                            <button class="btn btn-primary btn-full" style="margin-top:12px" onclick="salvarRoleplay()" data-i18n="rp.save">💾 Create Scenario</button>
+                        </div>
+                        <div class="card">
+                            <div class="card-title"><span class="ct-icon">📚</span> <span data-i18n="rp.saved">Saved Scenarios</span></div>
+                            <div id="rp-list"><div class="empty-state"><div class="es-icon">🎭</div><p data-i18n="rp.none">No scenarios saved.</p></div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ========================================== -->
+                <!-- VISION PANEL                               -->
+                <!-- ========================================== -->
+                <div class="panel" id="panel-visao">
+                    <div class="panel-body">
+                        <div class="card">
+                            <div class="card-title"><span class="ct-icon">📸</span> <span data-i18n="vision.screenshot">Last Screenshot</span></div>
+                            <div class="vision-img-wrap">
+                                <img id="img-last-vision" src="/api/last_vision" alt="No capture yet">
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-title"><span class="ct-icon">📝</span> <span data-i18n="vision.context">Visual Context</span></div>
+                            <textarea id="box-visao-contexto" class="vision-desc" readonly data-i18n-placeholder="vision.waiting" placeholder="Waiting for capture…"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ========================================== -->
+                <!-- MEMORY PANEL (RAG)                         -->
+                <!-- ========================================== -->
+                <div class="panel" id="panel-memorias">
+                    <div class="panel-body">
+                        <div class="card">
+                            <div class="card-title">
+                                <span class="ct-icon">🧠</span> <span data-i18n="mem.title">Semantic Memory (RAG)</span>
+                                <span class="badge badge-accent" id="mem-count" style="margin-left:auto">0</span>
+                            </div>
+                            <p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5" data-i18n="mem.desc">
+                                Facts extracted automatically from conversations and indexed by semantic similarity.
+                                Used to personalize future responses without repeating context.
+                            </p>
+                            <div style="display:flex;gap:8px;margin-bottom:12px">
+                                <div class="search-wrap" style="flex:1;margin:0">
+                                    <input class="search-input" id="mem-search" data-i18n-placeholder="mem.filter" placeholder="Filter memories…" oninput="filtrarMemorias()">
+                                </div>
+                                <button class="btn btn-danger" onclick="apagarTodasMemorias()" data-i18n="mem.delete_all">🗑 Delete All</button>
+                            </div>
+                            <div id="mem-list"><div class="empty-state"><div class="es-icon">🧠</div><p data-i18n="mem.none">No memories yet.<br>Chat so the assistant can learn.</p></div></div>
+                        </div>
+                    </div>
+                </div>
+
+            </div> <!-- #panels -->
+
+            <!-- Mobile bottom navigation -->
+            <nav id="mobile-nav">
+                <div class="mnav-item active" onclick="showPanel('chat',this)"><span class="mnav-icon">💬</span><span data-i18n="nav.chat">Chat</span></div>
+                <div class="mnav-item" onclick="showPanel('sistema',this)"><span class="mnav-icon">⚙️</span><span data-i18n="nav.system">Config</span></div>
+                <div class="mnav-item" onclick="showPanel('persona',this)"><span class="mnav-icon">🎭</span><span data-i18n="nav.persona">Persona</span></div>
+                <div class="mnav-item" onclick="showPanel('memorias',this)"><span class="mnav-icon">🧠</span><span data-i18n="nav.memory">Memory</span></div>
+                <div class="mnav-item" onclick="showPanel('plugins',this)"><span class="mnav-icon">🔌</span><span data-i18n="nav.plugins">Plugins</span></div>
+                <div class="mnav-item" onclick="showPanel('store',this)"><span class="mnav-icon">🛒</span><span>Store</span></div>
+            </nav>
+
+        </div> <!-- #main -->
+    </div> <!-- #app -->
+
+    <!-- ========================================== -->
+    <!-- MODAL: EDIT PLUGIN                         -->
+    <!-- ========================================== -->
+    <div class="modal-overlay" id="modal-editar">
+        <div class="modal-box">
+            <div class="modal-title">✏️ <span data-i18n="modal.edit_tool">Edit Tool</span></div>
+            <div class="form-row">
+                <label class="form-label" data-i18n="plugins.id_readonly">ID (read only)</label>
+                <input class="form-input" id="edit_nome" readonly>
+            </div>
+            <div class="form-row">
+                <label class="form-label" data-i18n="plugins.desc">Description</label>
+                <input class="form-input" id="edit_desc">
+            </div>
+            <div class="form-row">
+                <label class="form-label" data-i18n="plugins.params">Parameters</label>
+                <div id="edit-params-container"></div>
+                <button class="btn btn-ghost" style="margin-top:6px" onclick="adicionarParametroEdicao()" data-i18n="plugins.add_param">+ Parameter</button>
+            </div>
+            <div class="form-row">
+                <label class="form-label" data-i18n="plugins.pip_req">pip packages (optional)</label>
+                <textarea class="form-textarea" id="edit_pip" style="font-family:monospace;font-size:12px;min-height:52px" data-i18n-placeholder="plugins.pip_placeholder" placeholder="e.g. pywhatkit"></textarea>
+            </div>
+            <div class="form-row">
+                <label class="form-label" data-i18n="plugins.code">Python Code</label>
+                <textarea class="form-textarea" id="edit_codigo" style="font-family:monospace;font-size:12px;min-height:130px"></textarea>
+            </div>
+            <!-- Master tools section (hidden by default) -->
+            <div id="master-tools-container" style="display:none; margin-top:20px; padding-top:20px; border-top:1px solid #2a2a2a;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                    <h3 style="margin:0; font-size:16px;">🔧 Tools in this Master</h3>
+                    <button class="btn btn-sm btn-primary" onclick="abrirEditorToolMaster(document.getElementById('edit_nome').value)">
+                        + Add Tool
+                    </button>
+                </div>
+                <div id="master-tools-list"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-success" onclick="salvarEdicao()">✓ Save</button>
+                <button class="btn btn-ghost" onclick="fecharModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: MASTER TOOL EDITOR                  -->
+    <!-- ========================================== -->
+    <div class="modal-overlay" id="modal-tool-master">
+        <div class="modal-box">
+            <input type="hidden" id="tool-master-name-input">
+            <input type="hidden" id="tool-master-creating">
+            <div class="modal-title">🔧 <span id="tool-modal-title">Edit Tool</span></div>
+            <div class="form-row">
+                <label class="form-label">Tool Name</label>
+                <input class="form-input" id="tool_nome" placeholder="e.g. type_text">
+            </div>
+            <div class="form-row">
+                <label class="form-label">Description</label>
+                <input class="form-input" id="tool_desc" placeholder="What does this tool do?">
+            </div>
+            <div class="form-row">
+                <label class="form-label">JSON Schema</label>
+                <textarea class="form-textarea" id="tool_schema" style="font-family:monospace;font-size:12px;min-height:80px" placeholder='{"type":"object","properties":{"text":{"type":"string"}}}'>{}</textarea>
+            </div>
+            <div class="form-row">
+                <label class="form-label">Python Code</label>
+                <textarea class="form-textarea" id="tool_codigo" style="font-family:monospace;font-size:12px;min-height:120px" placeholder="import pyautogui&#10;pyautogui.write(arguments.get('text', ''))"></textarea>
+            </div>
+            <div class="form-row">
+                <label class="form-label">Pip Requirements (optional)</label>
+                <input class="form-input" id="tool_pip" placeholder="e.g. pyautogui">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-success" onclick="salvarToolMaster()">✓ Save Tool</button>
+                <button class="btn btn-ghost" onclick="document.getElementById('modal-tool-master').classList.remove('open')">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: SUBMIT TO STORE                     -->
+    <!-- ========================================== -->
+    <div id="submit-dialog" class="modal">
+        <div class="modal-content" style="max-width: 700px;">
+            <span class="close" onclick="closeSubmitDialog()">&times;</span>
+            <h2 data-i18n="store.submit_title">📤 Submit to Store</h2>
+
+            <div class="form-row">
+                <label class="form-label" data-i18n="store.submit_type">Type</label>
+                <select id="submit-type" class="form-input" onchange="toggleSubmitType()">
+                    <option value="plugin" data-i18n="store.type_plugin">🔧 Plugin (Single Tool)</option>
+                    <option value="master" data-i18n="store.type_master">🎯 Master (Multiple Tools)</option>
+                </select>
+            </div>
+
+            <div class="form-row">
+                <label class="form-label" data-i18n="store.name_id">Name / ID</label>
+                <input type="text" id="submit-name" class="form-input" data-i18n-placeholder="store.name_placeholder" placeholder="e.g. screen_brightness">
+            </div>
+
+            <div class="form-row">
+                <label class="form-label" data-i18n="store.description">Description</label>
+                <textarea id="submit-description" class="form-textarea" rows="2" data-i18n-placeholder="store.desc_placeholder" placeholder="What does this plugin/master do?"></textarea>
+            </div>
+
+            <div class="form-row">
+                <label class="form-label" data-i18n="store.author">Author (Name or Email)</label>
+                <input type="text" id="submit-author" class="form-input" data-i18n-placeholder="store.author_placeholder" placeholder="Your name">
+            </div>
+
+            <div class="form-row">
+                <label class="form-label" data-i18n="store.category">Category</label>
+                <select id="submit-category" class="form-input">
+                    <option value="system" data-i18n="store.cat_system">System</option>
+                    <option value="media" data-i18n="store.cat_media">Media</option>
+                    <option value="web" data-i18n="store.cat_web">Web</option>
+                    <option value="automation" data-i18n="store.cat_automation">Automation</option>
+                </select>
+            </div>
+
+            <div id="submit-plugin-fields">
+                <div style="border-top: 1px solid var(--border); margin: 20px 0; padding-top: 20px;">
+                    <h3 style="margin-bottom: 15px;" data-i18n="store.tool_details">🔧 Tool Details</h3>
+
+                    <div class="form-row">
+                        <label class="form-label" data-i18n="store.tool_name">Tool Name</label>
+                        <input type="text" id="submit-tool-name" class="form-input" data-i18n-placeholder="store.tool_name_placeholder" placeholder="e.g. set_brightness">
+                    </div>
+
+                    <div class="form-row">
+                        <label class="form-label" data-i18n="store.tool_desc">Tool Description</label>
+                        <input type="text" id="submit-tool-desc" class="form-input" data-i18n-placeholder="store.tool_desc_placeholder" placeholder="What this tool does">
+                    </div>
+
+                    <div class="form-row">
+                        <label class="form-label" data-i18n="store.json_schema">JSON Schema</label>
+                        <textarea id="submit-tool-schema" class="form-textarea" rows="5" placeholder='{"type":"object","properties":{"level":{"type":"number"}}}'></textarea>
+                    </div>
+
+                    <div class="form-row">
+                        <label class="form-label" data-i18n="store.python_code">Python Code</label>
+                        <textarea id="submit-tool-code" class="form-textarea" rows="10" style="font-family: monospace;" placeholder="import screen_brightness_control as sbc&#10;sbc.set_brightness(arguments.get('level', 50))"></textarea>
+                    </div>
+
+                    <div class="form-row">
+                        <label class="form-label" data-i18n="store.pip_requirements">pip requirements (optional)</label>
+                        <input type="text" id="submit-tool-pip" class="form-input" data-i18n-placeholder="store.pip_placeholder" placeholder="e.g. screen-brightness-control">
+                    </div>
+                </div>
+            </div>
+
+            <div id="submit-master-fields" style="display:none;">
+                <div style="border-top: 1px solid var(--border); margin: 20px 0; padding-top: 20px;">
+                    <h3 style="margin-bottom: 15px;" data-i18n="store.tools_list">🎯 Tools</h3>
+                    <div id="submit-master-tools-list"></div>
+                    <button type="button" class="btn btn-ghost" onclick="addMasterTool()" data-i18n="store.add_tool">+ Add Tool</button>
+                </div>
+            </div>
+
+            <div class="modal-footer" style="margin-top: 30px;">
+                <button class="btn-submit" onclick="submitToStore()" data-i18n="store.generate_issue">📤 Generate GitHub Issue</button>
+                <button class="btn btn-ghost" onclick="closeSubmitDialog()" data-i18n="store.cancel">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: MASTER TOOL DIALOG (STORE SUBMIT)   -->
+    <!-- ========================================== -->
+    <div id="master-tool-dialog" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <span class="close" onclick="closeMasterToolDialog()">&times;</span>
+            <h3 data-i18n="store.add_tool_to_master">Add Tool to Master</h3>
+
+            <input type="hidden" id="mt-edit-index">
+
+            <div class="form-row">
+                <label class="form-label" data-i18n="store.tool_name">Tool Name</label>
+                <input type="text" id="mt-name" class="form-input" placeholder="e.g. click_mouse">
+            </div>
+
+            <div class="form-row">
+                <label class="form-label" data-i18n="store.description">Description</label>
+                <input type="text" id="mt-desc" class="form-input">
+            </div>
+
+            <div class="form-row">
+                <label class="form-label" data-i18n="store.json_schema">JSON Schema</label>
+                <textarea id="mt-schema" class="form-textarea" rows="4" placeholder='{"type":"object","properties":{}}'></textarea>
+            </div>
+
+            <div class="form-row">
+                <label class="form-label" data-i18n="store.python_code">Python Code</label>
+                <textarea id="mt-code" class="form-textarea" rows="8" style="font-family: monospace;"></textarea>
+            </div>
+
+            <div class="form-row">
+                <label class="form-label" data-i18n="store.pip_requirements">pip requirements (optional)</label>
+                <input type="text" id="mt-pip" class="form-input">
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-success" onclick="saveMasterTool()" data-i18n="store.save_tool">✓ Save Tool</button>
+                <button class="btn btn-ghost" onclick="closeMasterToolDialog()" data-i18n="store.cancel">Cancel</button>
+            </div>
+        </div>
+    </div>
+    <script src="/static/js/i18n.js"></script>
+    <script type="module" src="/static/js/store.js"></script>
+    <script type="module" src="/static/js/main.js"></script>
+</body>
+</html>

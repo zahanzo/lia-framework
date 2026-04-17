@@ -39,6 +39,7 @@ ENV/
 .idea/
 *.sublime-project
 *.sublime-workspace
+.continue
 
 # OS
 .DS_Store
@@ -55,6 +56,17 @@ new_vision.signal
 last_vision.png
 *.signal
 *.tmp
+test.py
+store.json
+store_cache.json
+servers_config.json
+
+# Plugins (user provides their own)
+plugins/base/adjust_mood.py
+plugins/base/open_app.py
+plugins/base/youtube_player.py
+plugins/masters/browser_control
+plugins/masters/typing_control
 
 # Live2D model files (large binary assets — user provides their own)
 *.moc3
