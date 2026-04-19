@@ -560,16 +560,24 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
     # ── BUILD API MESSAGES ────────────────────────────────────────────
     summary   = config.get_status_summary()
     metadata = (
-        f"[SYSTEM CONTEXT]\n{summary}{memory_block}{skill_injection}\n\n"
-        "NATIVE TOOL USE: You must use the provided tool-calling capability for any actions. "
-        "NEVER manually write tags like <function> or XML/JSON blocks in your text response. "
-        "Only call a tool if the user EXPLICITLY asked for an action (open apps, search, music, commands). "
-        "NEVER call tools for greetings, casual conversation, or affectionate messages. "
-        "When in doubt, provide a standard text response without using tools."
-        "[SYSTEM NOTE]"
-        "When you have access to specialized tools from a master, you should prefer those over general tools."
-        "For example, if the master has a web search tool, use it instead of a generic browser tool. "
-    )
+    f"[SYSTEM CONTEXT]\n{summary}{memory_block}{skill_injection}\n\n"
+    "CRITICAL TOOL USAGE RULES:\n\n"
+    "1. QUESTIONS vs COMMANDS:\n"
+    "   Questions (what/which/do you know) → ANSWER ONLY, NO TOOLS\n"
+    "   Commands (play/open/create) → USE TOOLS\n\n"
+    "2. ONLY use action tools with EXPLICIT verbs:\n"
+    "   play, open, show, create, send, delete, execute, start\n"
+    "   toca, abre, mostra, cria, envia, deleta, executa, inicia\n\n"
+    "3. NEVER for: questions, greetings, casual talk, statements, memory\n\n"
+    "KEY EXAMPLES:\n"
+    "✅ 'Play my favorite playlist' → use youtube_player\n"
+    "❌ 'What is my favorite playlist?' → answer only (NO TOOL)\n"
+    "❌ 'My favorite is X' → conversational response\n\n"
+    "TOOL RULES:\n"
+    "- Use native function calling ONLY (never <function> tags)\n"
+    "- If tool unavailable, ask user to rephrase with action verb\n\n"
+    "[NOTE] Prefer specialized master tools over general ones."
+)
     history_base = list(config.history[:-1])   # exclude last (the user msg just added)
 
     if has_image:
@@ -691,13 +699,32 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
             print(t("mcp.tool_using", tools=", ".join(tool_names)))
             
             results = []
-            system_contexts = []  # ✅ NOVO: Armazena contextos de sistema
+            system_contexts = []  # Store system contexts
+            
+            # Import validation functions
+            from core.tool_retrieval import _is_action_tool, _has_explicit_command
             
             for tc in msg.tool_calls:
+                tool_name = tc.function.name
                 args = json.loads(tc.function.arguments)
+                
+                # EXECUTIVE VALIDATION: Block action tools without explicit command
+                if _is_action_tool(tool_name) and not _has_explicit_command(user_message):
+                    print(t("mcp.executive_block", tool=tool_name))
+                    print(t("mcp.user_message", msg=user_message[:60]))
+                    print(t("mcp.command_hint"))
+                    
+                    # Respond to user explaining
+                    results.append(
+                        f"[INFO] The tool '{tool_name}' requires an explicit command to be executed. " +
+                        "Your message appears to be conversational. If you want to execute an action, " +
+                        "use command verbs like 'play', 'open', 'execute', etc."
+                    )
+                    continue
+                
                 try:
                     res = await asyncio.wait_for(
-                        mcp.call_tool(tc.function.name, arguments=args),
+                        mcp.call_tool(tool_name, arguments=args),
                         timeout=MCP_TOOL_TIMEOUT_SEC,
                     )
                     text_result = (res.content[0].text if res.content else "")
@@ -757,6 +784,11 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
                     response_text = "Sorry, I had trouble processing the tool results."
 
     # ── FINALIZE ──────────────────────────────────────────────────────
+    # Detect and warn about old function syntax
+    if response_text and '<function=' in response_text:
+        print("⚠️ [SYSTEM] LLM attempted to use old <function> syntax - this will fail!")
+        # Strip the invalid syntax
+        response_text = re.sub(r'<function=.*?>.*?</function>', '', response_text, flags=re.DOTALL)
     for tag, action in system_commands.items():
         if tag in (response_text or ""):
             action()

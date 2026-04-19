@@ -11,6 +11,7 @@ import sqlite3
 import json
 import math
 import os
+import re
 from datetime import datetime
 from core.i18n import t
 
@@ -18,12 +19,90 @@ from core.i18n import t
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(BASE_DIR, "data", "ai_brain.db")
 
+# ==========================================
+# TOOL CATEGORIZATION
+# ==========================================
+
+# Action tools (require explicit command)
+ACTION_TOOLS = [
+    'youtube_player',
+    'open_app',
+    'adjust_mood',
+]
+
+# Similarity thresholds
+SIMILARITY_THRESHOLD = {
+    'informational': 0.25,  # More permissive for queries
+    'action': 0.45          # Stricter for actions
+}
+
+# Tools that are always available (meta-control)
 ALWAYS_AVAILABLE_TOOLS = [
     'activate_master',
     'deactivate_master', 
     'get_active_master',
     'list_available_masters'
 ]
+
+def _is_action_tool(tool_name: str) -> bool:
+    """Check if a tool is an action tool (requires explicit command)"""
+    return tool_name in ACTION_TOOLS
+
+def _has_explicit_command(text: str) -> bool:
+    """
+    Detect if the message contains an explicit action command.
+    
+    Examples of explicit commands:
+    ✅ "play playlist X"
+    ✅ "open YouTube"
+    ✅ "put music on"
+    
+    Examples of NON-commands:
+    ❌ "my favorite playlist is X" (informational)
+    ❌ "did you miss me?" (conversational)
+    ❌ "remember playlist X" (memory instruction)
+    """
+    
+    # Portuguese command patterns
+    pt_patterns = [
+        r'\b(toca|toque|tocar)\b',           # play music
+        r'\b(abr[ae]|abrir)\b',              # open
+        r'\b(execut[ae]|executar)\b',        # execute
+        r'\b(mostr[ae]|mostrar)\b',          # show
+        r'\b(lig[ae]|ligar)\b',              # turn on
+        r'\b(coloca|colocar|bota|botar)\b',  # put/place
+        r'\b(inicia|iniciar|start)\b',       # start
+        r'\b(envi[ae]|enviar|mand[ae]|mandar)\b',  # send
+        r'\b(cri[ae]|criar|faz|fazer)\b',    # create/make
+        r'\b(delet[ae]|deletar|apag[ae]|apagar)\b',  # delete
+        r'\bpode (tocar|abrir|mostrar|criar|fazer)\b'  # can you...# Português
+        r'\bquero (a|o|que|ouvir|ver|abrir)\b',   # "eu quero..."
+        r'\bpreciso (de|que|ouvir|ver|abrir)\b',  # "eu preciso..."
+
+    ]
+    
+    # English command patterns
+    en_patterns = [
+        r'\b(play|plays)\b',
+        r'\b(open|opens)\b',
+        r'\b(execute|run)\b',
+        r'\b(show|display)\b',
+        r'\b(turn on|switch on)\b',
+        r'\b(put|place)\b',
+        r'\b(start|begin)\b',
+        r'\b(send|email)\b',
+        r'\b(create|make)\b',
+        r'\b(delete|remove)\b',
+        r'\bcan you (play|open|show|create|make)\b'
+        r'\bi want (to|the|my)\b',   # "I want..."
+        r'\bi need (to|the|my)\b',   # "I need..."
+    ]
+    
+    all_patterns = pt_patterns + en_patterns
+    
+    text_lower = text.lower()
+    return any(re.search(pattern, text_lower) for pattern in all_patterns)
+
 
 # ==========================================
 # EMBEDDING MODEL (shared with memory.py)
@@ -162,6 +241,9 @@ def search_tools(query: str, top_k: int = 5, active_master: str = None, exclude_
     
     exclude_tools = exclude_tools or []
     
+    # Detect if there's an explicit command
+    has_command = _has_explicit_command(query)
+    
     conn = sqlite3.connect(DB_PATH, timeout=20)
     try:
         # Build exclusion clause
@@ -173,8 +255,8 @@ def search_tools(query: str, top_k: int = 5, active_master: str = None, exclude_
             exclude_clause = f"AND t.name NOT IN ({placeholders})"
             params = exclude_tools
         
-        # ✅ CORREÇÃO: Buscar APENAS ferramentas GLOBAIS (parent_id IS NULL)
-        # Ferramentas de masters ativos são adicionadas pela Layer 2
+        # Fetch ONLY global tools (parent_id IS NULL)
+        # Master tools are added by Layer 2
         query_sql = f"""
             SELECT t.name, t.description, t.schema_json, t.python_code, t.parent_id,
                    e.embedding_json
@@ -182,7 +264,7 @@ def search_tools(query: str, top_k: int = 5, active_master: str = None, exclude_
             LEFT JOIN tool_embeddings e ON t.name = e.tool_name
             WHERE e.embedding_json IS NOT NULL
               AND t.is_master = 0
-              AND (t.parent_id IS NULL OR t.parent_id = '')  -- ✅ APENAS GLOBAIS
+              AND (t.parent_id IS NULL OR t.parent_id = '')
               {exclude_clause}
         """
         
@@ -194,13 +276,27 @@ def search_tools(query: str, top_k: int = 5, active_master: str = None, exclude_
             tool_embedding = json.loads(emb_json)
             similarity = _cosine_similarity(query_embedding, tool_embedding)
             
+            # Apply threshold based on tool type
+            is_action = _is_action_tool(tool_name)
+            threshold = SIMILARITY_THRESHOLD['action'] if is_action else SIMILARITY_THRESHOLD['informational']
+            
+            # If it's an action tool WITHOUT explicit command, block it
+            if is_action and not has_command:
+                print(t("tool_retrieval.action_blocked", tool=tool_name, sim=similarity))
+                continue
+            
+            # If similarity below threshold, discard
+            if similarity < threshold:
+                continue
+            
             results.append({
                 "name": tool_name,
                 "description": desc,
                 "schema_json": schema,
                 "python_code": code,
                 "similarity": similarity,
-                "parent_id": parent_id
+                "parent_id": parent_id,
+                "is_action": is_action  # Flag for tool type
             })
         
         # Sort by similarity (highest first)
@@ -211,14 +307,6 @@ def search_tools(query: str, top_k: int = 5, active_master: str = None, exclude_
         
     finally:
         conn.close()
-        
-# Ferramentas que devem SEMPRE estar disponíveis (meta-controle)
-ALWAYS_AVAILABLE_TOOLS = [
-    'activate_master',
-    'deactivate_master', 
-    'get_active_master',
-    'list_available_masters'
-]
 
 
 def get_relevant_tools_for_ai(user_input: str, top_k: int = 5) -> list:
@@ -333,19 +421,22 @@ def get_relevant_tools_for_ai(user_input: str, top_k: int = 5) -> list:
     total_tools = len(layer1_formatted) + len(layer2_formatted) + len(layer3_formatted)
     
     if active_master:
-        print(f"🎯 [Master Ativo: {active_master}] {len(layer2_formatted)} ferramentas do master sempre presentes")
+        print(t("tool_retrieval.active_master", master=active_master, count=len(layer2_formatted)))
     
     if layer3_formatted:
         print(t("tool_retrieval.selected_tools", count=len(layer3_formatted)))
         for i, tool_data in enumerate(layer3_formatted, 1):
             sim = semantic_tools[i-1]["similarity"]
-            print(f"   {i}. 🔧 {tool_data['name']} ({t('tool_retrieval.similarity')}: {sim:.2f})")
+            is_action = semantic_tools[i-1].get("is_action", False)
+            tool_type_label = t("tool_retrieval.action_label") if is_action else t("tool_retrieval.info_label")
+            tool_type = f"🎬 {tool_type_label}" if is_action else f"📖 {tool_type_label}"
+            print(f"   {i}. 🔧 {tool_data['name']} [{tool_type}] ({t('tool_retrieval.similarity')}: {sim:.2f})")
     
-    print(f"📊 Total de ferramentas enviadas para API: {total_tools}")
-    print(f"   └─ Meta-controle: {len(layer1_formatted)}")
+    print(t("tool_retrieval.total_tools", total=total_tools))
+    print(t("tool_retrieval.meta_control", count=len(layer1_formatted)))
     if active_master:
-        print(f"   └─ Master '{active_master}': {len(layer2_formatted)}")
-    print(f"   └─ Busca semântica: {len(layer3_formatted)}")
+        print(t("tool_retrieval.master_tools", master=active_master, count=len(layer2_formatted)))
+    print(t("tool_retrieval.semantic_search", count=len(layer3_formatted)))
     
     # ======================================
     # Return all 3 layers combined

@@ -743,6 +743,67 @@ _translations: dict[str, dict[str, str]] = {
         "en": "Stopped.",
         "pt": "Parado."
     },
+    "tool_retrieval.test_complete": {
+    "en": "✅ Test completed!",
+    "pt": "✅ Teste concluído!"
+},
+
+# ⬇️ ADD THESE NEW KEYS BELOW ⬇️
+
+"tool_retrieval.action_blocked": {
+    "en": "🚫 Blocked '{tool}' (action tool without explicit command, sim={sim:.2f})",
+    "pt": "🚫 Bloqueada '{tool}' (ação sem comando explícito, sim={sim:.2f})"
+},
+
+"tool_retrieval.active_master": {
+    "en": "🎯 [Active Master: {master}] {count} master tools always present",
+    "pt": "🎯 [Master Ativo: {master}] {count} ferramentas do master sempre presentes"
+},
+
+"tool_retrieval.total_tools": {
+    "en": "📊 Total tools sent to API: {total}",
+    "pt": "📊 Total de ferramentas enviadas para API: {total}"
+},
+
+"tool_retrieval.meta_control": {
+    "en": "   └─ Meta-control: {count}",
+    "pt": "   └─ Meta-controle: {count}"
+},
+
+"tool_retrieval.master_tools": {
+    "en": "   └─ Master '{master}': {count}",
+    "pt": "   └─ Master '{master}': {count}"
+},
+
+"tool_retrieval.semantic_search": {
+    "en": "   └─ Semantic search: {count}",
+    "pt": "   └─ Busca semântica: {count}"
+},
+
+"tool_retrieval.action_label": {
+    "en": "ACTION",
+    "pt": "AÇÃO"
+},
+
+"tool_retrieval.info_label": {
+    "en": "INFO",
+    "pt": "INFO"
+},
+
+"mcp.executive_block": {
+    "en": "🚫 [EXECUTIVE BLOCK] '{tool}' will not be executed - message does not contain explicit command",
+    "pt": "🚫 [BLOQUEIO EXECUTIVO] '{tool}' não será executado - mensagem não contém comando explícito"
+},
+
+"mcp.user_message": {
+    "en": "   💬 User message: '{msg}'",
+    "pt": "   💬 Mensagem do usuário: '{msg}'"
+},
+
+"mcp.command_hint": {
+    "en": "   ℹ️ To execute actions, use command verbs like: play, open, execute, show, etc.",
+    "pt": "   ℹ️ Para executar ações, use verbos de comando como: toca, abre, executa, mostra, etc."
+},
 }
 
 
