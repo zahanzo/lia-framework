@@ -239,6 +239,45 @@ async def classify_intent(message: str) -> str:
         return cat if cat in ("vision", "code", "general") else "general"
     except Exception:
         return "general"
+    
+async def classify_action_vs_question(message: str) -> str:
+    """
+    Use a small fast model to classify if message is an action command or question.
+    Returns: "action" | "question"
+    """
+    prompt = (
+        "Classify the message below into ONE category. Reply ONLY the category word.\n\n"
+        "- action: user wants to DO something (play music, open app, type text, create file, etc.)\n"
+        "- question: user is ASKING about something (what is, which one, do you know, etc.)\n\n"
+        f"Message: {message}\n\n"
+        "Reply ONLY: action OR question"
+    )
+    try:
+        # Respeita modo local
+        if config.CURRENT_MODE.startswith("local") and hasattr(config, 'client_local') and config.client_local:
+            local_model = config.config_data.get("modelo_ia_local", "local-model")
+            r = await asyncio.to_thread(
+                config.client_local.chat.completions.create,
+                model=local_model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=5,
+                temperature=0.0
+            )
+        elif config.client_groq:
+            r = await asyncio.to_thread(
+                config.client_groq.chat.completions.create,
+                model="llama-3.1-8b-instant",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=5,
+                temperature=0.0
+            )
+        else:
+            return "action"  # Fallback: assume action (mais seguro)
+        
+        cat = r.choices[0].message.content.strip().lower()
+        return cat if cat in ("action", "question") else "action"
+    except Exception:
+        return "question"
 
 
 # ==========================================
@@ -561,6 +600,8 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
     summary   = config.get_status_summary()
     metadata = (
     f"[SYSTEM CONTEXT]\n{summary}{memory_block}{skill_injection}\n\n"
+    "⚠️ CRITICAL: NEVER write <function=...> or XML/JSON tags in your response!\n"
+    "Use ONLY the native tool calling system. Writing function tags = INSTANT FAILURE.\n\n"
     "CRITICAL TOOL USAGE RULES:\n\n"
     "1. QUESTIONS vs COMMANDS:\n"
     "   Questions (what/which/do you know) → ANSWER ONLY, NO TOOLS\n"
@@ -574,7 +615,6 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
     "❌ 'What is my favorite playlist?' → answer only (NO TOOL)\n"
     "❌ 'My favorite is X' → conversational response\n\n"
     "TOOL RULES:\n"
-    "- Use native function calling ONLY (never <function> tags)\n"
     "- If tool unavailable, ask user to rephrase with action verb\n\n"
     "[NOTE] Prefer specialized master tools over general ones."
 )
@@ -600,16 +640,6 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
                 file_name = att.get("nome") or att.get("name", "")
                 extra_context += _read_text_file(att["url"], file_name)
                 
-        system_context_msg = []
-        if active_system_context:
-            system_context_msg = [{"role": "system", "content": active_system_context}]
-        api_messages = (
-            history_base
-            + [{"role": "system", "content": metadata}]
-            + system_context_msg
-            + [{"role": "user",   "content": f"{user_message}{extra_context}"}]
-        )
-
     # ── MODEL ROUTING ─────────────────────────────────────────────────
     current_provider = config.config_data.get("modo_ia", "groq")
     provider_models = config.config_data.get("modelos", {}).get(current_provider, {})
@@ -664,13 +694,53 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
 
     else:
         _write_status("⚙️ Generating response...")
-
-        # Usa RAG para buscar ferramentas relevantes (embeddings)
-        relevant_tools_data = tool_retrieval.get_relevant_tools_for_ai(user_message, top_k=5)
-        relevant_tools = _convert_tools_to_mcp_format(relevant_tools_data)
+        action_classification = await classify_action_vs_question(user_message)
+        is_action_request = (action_classification == "action")
         
-        # Roleplay mode: no tools — the persona model should respond freely
+        # Usa RAG para buscar ferramentas relevantes (embeddings)
+        relevant_tools_data = tool_retrieval.get_relevant_tools_for_ai(
+            user_message, 
+            top_k=5, 
+            is_action_request=is_action_request
+        )
+        relevant_tools = _convert_tools_to_mcp_format(relevant_tools_data)
         use_tools = relevant_tools if not config.ROLEPLAY_ACTIVE else []
+        
+        # ✅ ADICIONAR: Processar anexos de arquivo
+        extra_context = ""
+        for att in attachments:
+            if _get_file_type(att) == "arquivo":
+                file_name = att.get("nome") or att.get("name", "")
+                extra_context += _read_text_file(att["url"], file_name)
+        
+        system_context_msg = []
+        if active_system_context:
+            system_context_msg = [{"role": "system", "content": active_system_context}]
+        
+        few_shot_example = []
+        if use_tools:  # Only add if tools are available
+            few_shot_example = [
+                {"role": "user", "content": "Activate the typing master"},
+                {"role": "assistant", "content": "", "tool_calls": [
+                    {
+                        "id": "call_example",
+                        "type": "function",
+                        "function": {
+                            "name": "activate_master",
+                            "arguments": '{"master_name": "typing_control"}'
+                        }
+                    }
+                ]},
+                {"role": "tool", "tool_call_id": "call_example", "content": "Master activated successfully"}
+            ]
+        
+        api_messages = (
+            history_base
+            + [{"role": "system", "content": metadata}]
+            + system_context_msg
+            + few_shot_example
+            + [{"role": "user", "content": f"{user_message}{extra_context}"}]  # ← Agora extra_context existe!
+        )
 
         def _call_chat():
             if config.CURRENT_MODE == "openrouter" and config.client_openrouter:
@@ -689,10 +759,58 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
                     model="gpt-4o-mini", messages=api_messages,
                     tools=use_tools or None)
 
-        r = await asyncio.to_thread(_call_chat)
+        # ✅ ADICIONAR TRY/EXCEPT AQUI:
+        try:
+            r = await asyncio.to_thread(_call_chat)
+        except Exception as api_error:
+            error_msg = str(api_error)
+            
+            # ✅ FALLBACK: Detect XML syntax and convert to tool calling
+            if 'tool_use_failed' in error_msg and '<function=' in error_msg:
+                print("⚠️ [FALLBACK] LLM used XML syntax - parsing and executing...")
+                
+                # Extract tool name and arguments from error
+                match = re.search(r"<function=([^:>]+):?([^>]*)>", error_msg)
+                
+                if match:
+                    tool_name = match.group(1).strip()
+                    args_str = match.group(2).strip()
+                    
+                    # Parse arguments
+                    try:
+                        args = json.loads(args_str) if args_str and args_str != '{}' else {}
+                    except:
+                        args = {}
+                    
+                    print(f"✅ [FALLBACK] Parsed: {tool_name}({args})")
+                    
+                    # Execute tool via MCP
+                    try:
+                        res = await asyncio.wait_for(
+                            mcp.call_tool(tool_name, arguments=args),
+                            timeout=MCP_TOOL_TIMEOUT_SEC,
+                        )
+                        result_text = (res.content[0].text if res.content else "")
+                        print(f"✅ [FALLBACK] Executed successfully!")
+                        
+                        # Return as if it was a normal response
+                        response_text = result_text
+                        await gerar_voz(response_text)
+                        return session_id
+                        
+                    except Exception as tool_error:
+                        print(f"❌ [FALLBACK] Execution failed: {tool_error}")
+                        raise api_error
+                else:
+                    print("❌ [FALLBACK] Could not parse XML")
+                    raise api_error
+            else:
+                # Not XML error - re-raise
+                raise
+        
         msg = r.choices[0].message
         response_text = msg.content or ""
-
+        
        # --- Tool calls (MCP) ---
         if hasattr(msg, "tool_calls") and msg.tool_calls:
             tool_names = [tc.function.name for tc in msg.tool_calls]
@@ -701,26 +819,10 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
             results = []
             system_contexts = []  # Store system contexts
             
-            # Import validation functions
-            from core.tool_retrieval import _is_action_tool, _has_explicit_command
             
             for tc in msg.tool_calls:
                 tool_name = tc.function.name
                 args = json.loads(tc.function.arguments)
-                
-                # EXECUTIVE VALIDATION: Block action tools without explicit command
-                if _is_action_tool(tool_name) and not _has_explicit_command(user_message):
-                    print(t("mcp.executive_block", tool=tool_name))
-                    print(t("mcp.user_message", msg=user_message[:60]))
-                    print(t("mcp.command_hint"))
-                    
-                    # Respond to user explaining
-                    results.append(
-                        f"[INFO] The tool '{tool_name}' requires an explicit command to be executed. " +
-                        "Your message appears to be conversational. If you want to execute an action, " +
-                        "use command verbs like 'play', 'open', 'execute', etc."
-                    )
-                    continue
                 
                 try:
                     res = await asyncio.wait_for(
@@ -730,6 +832,8 @@ async def _process_turn(mcp, tools_json, system_commands, session_log, session_i
                     text_result = (res.content[0].text if res.content else "")
                 except Exception as e:
                     text_result = f"Error executing {tc.function.name}: {str(e)}"
+                
+                results.append(text_result)
                 
                 # ✅ NOVO: Extrair contexto de sistema ANTES de processar
                 cleaned_result, system_context = _extract_system_context(text_result)
