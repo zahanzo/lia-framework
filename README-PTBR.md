@@ -43,7 +43,7 @@ Para garantir uma experiência fluida com o L.I.A., especialmente ao usar funcio
 
 **1. Clonar o repositório**
 ```bash
-git clone https://github.com/your-username/lia-framework
+git clone https://github.com/zahanzo/lia-framework
 cd lia-framework
 ```
 
