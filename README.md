@@ -43,7 +43,7 @@ To ensure a smooth experience with L.I.A., especially when using Vision features
 
 **1. Clone the repository**
 ```bash
-git clone https://github.com/your-username/lia-framework
+git clone https://github.com/zahanzo/lia-framework
 cd lia-framework
 ```
 
